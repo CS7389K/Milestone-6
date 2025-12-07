@@ -5,7 +5,7 @@ SERVO_START_SRV = '/servo_server/start_servo'
 SERVO_STOP_SRV = '/servo_server/stop_servo'
 
 # Topic names
-BASE_TWIST_TOPIC = 'cmd_vel'
+BASE_TWIST_TOPIC = '/cmd_vel'
 ARM_JOINT_TOPIC = '/arm_controller/follow_joint_trajectory'
 GRIPPER_ACTION = '/gripper_controller/gripper_cmd'
 
