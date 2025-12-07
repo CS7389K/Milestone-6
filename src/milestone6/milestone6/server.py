@@ -45,7 +45,7 @@ class ML6Server(Node):
         self.declare_parameter('tolerance', 50)
         self.declare_parameter('min_bbox_width', 150)
         self.declare_parameter('forward_speed', 0.15)
-        self.declare_parameter('turn_speed_max', 1.5)
+        self.declare_parameter('turn_speed', 1.5)
         self.declare_parameter('display', True)
         self.declare_parameter('track_class', 39)  # Default to "bottle"
 
@@ -55,7 +55,7 @@ class ML6Server(Node):
         self._tolerance = self.get_parameter('tolerance').value 
         self._bbox_threshold = self.get_parameter('min_bbox_width').value
         self._forward_speed = self.get_parameter('forward_speed').value
-        self._turn_speed_max = self.get_parameter('turn_speed_max').value
+        self._turn_speed = self.get_parameter('turn_speed').value
         self._display = self.get_parameter('display').value
         self._track_class = self.get_parameter('track_class').value
         
@@ -135,7 +135,7 @@ class ML6Server(Node):
             # Normalize offset to [-1, 1] range
             angular_ratio = -offset_x / (self._image_width / 2.0)
             angular_ratio = max(-1.0, min(1.0, angular_ratio))  # clamp
-            angular_vel = angular_ratio * self._turn_speed_max
+            angular_vel = angular_ratio * self._turn_speed
             self.get_logger().info(f"Turning: offset={offset_x:.1f}px, angular_vel={angular_vel:.3f} rad/s")
         else:
             angular_vel = 0.0
