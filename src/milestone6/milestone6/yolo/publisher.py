@@ -93,31 +93,31 @@ class YOLOPublisher:
         if len(results) > 0 and hasattr(results[0], 'boxes') and results[0].boxes is not None:
             boxes = results[0].boxes
             if len(boxes) > 0:
-                # Get first detection
-                box = boxes[0]
-                x1, y1, x2, y2 = map(float, box.xyxy[0].cpu().numpy())
-                cls = int(box.cls[0].cpu().numpy())
-                
-                # Create YOLOData object
-                yolo_data = YOLOData(
-                    bbox_x=x1,
-                    bbox_y=y1,
-                    bbox_w=x2 - x1,
-                    bbox_h=y2 - y1,
-                    clz=cls
-                )
-                
-                # Serialize and publish
-                msg = String()
-                msg.data = json.dumps({
-                    'bbox_x': yolo_data.bbox_x,
-                    'bbox_y': yolo_data.bbox_y,
-                    'bbox_w': yolo_data.bbox_w,
-                    'bbox_h': yolo_data.bbox_h,
-                    'clz': yolo_data.clz
-                })
-                self._publisher.publish(msg)
-                self.get_logger().info(f"Publishing: {msg.data}")
+                # Publish ALL detections (not just first one)
+                for box in boxes:
+                    x1, y1, x2, y2 = map(float, box.xyxy[0].cpu().numpy())
+                    cls = int(box.cls[0].cpu().numpy())
+                    
+                    # Create YOLOData object
+                    yolo_data = YOLOData(
+                        bbox_x=x1,
+                        bbox_y=y1,
+                        bbox_w=x2 - x1,
+                        bbox_h=y2 - y1,
+                        clz=cls
+                    )
+                    
+                    # Serialize and publish
+                    msg = String()
+                    msg.data = json.dumps({
+                        'bbox_x': yolo_data.bbox_x,
+                        'bbox_y': yolo_data.bbox_y,
+                        'bbox_w': yolo_data.bbox_w,
+                        'bbox_h': yolo_data.bbox_h,
+                        'clz': yolo_data.clz
+                    })
+                    self._publisher.publish(msg)
+                    self.get_logger().info(f"Detected class {cls}: bbox=({x1:.0f},{y1:.0f},{x2-x1:.0f}x{y2-y1:.0f})")
         
         # Display frame with detections if enabled (always display, even without detections)
         if self._display:

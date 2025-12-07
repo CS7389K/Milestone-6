@@ -81,6 +81,13 @@ class ML6Server(Node):
         # Initialize YOLO subscriber (receives detection results)
         self.get_logger().info("Starting YOLO Subscriber...")
         self.yolo_subscriber = YOLOSubscriber(self, self._yolo_callback)
+        
+        # Track when we last saw the target object
+        self._last_detection_time = None
+        self._detection_timeout = 0.5  # Stop robot if no detection for 0.5 seconds
+        
+        # Create timer to check for lost target
+        self.check_timer = self.create_timer(0.1, self._check_target_lost)
 
         self.get_logger().info("ML6 Server Node has been started.")
 
@@ -102,11 +109,15 @@ class ML6Server(Node):
         Args:
             data: YOLOData object containing detection information
         """
-        self.get_logger().info(f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
+        self.get_logger().debug(f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
 
         if data.clz != self._track_class:
-            self.get_logger().info(f"Ignoring class {data.clz}, looking for {self._track_class}")
+            self.get_logger().debug(f"Ignoring class {data.clz}, looking for {self._track_class}")
             return
+
+        # Update detection timestamp
+        self._last_detection_time = self.get_clock().now()
+        self.get_logger().info(f"Detected target class {data.clz}! Processing movement...")
 
         # Calculate bounding box center
         bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
@@ -142,10 +153,23 @@ class ML6Server(Node):
         # Update teleop velocity command
         self.teleop.set_velocity(linear_x=linear_vel, angular_z=angular_vel)
     
+    def _check_target_lost(self):
+        """Stop robot if target hasn't been detected recently."""
+        if self._last_detection_time is None:
+            return  # Haven't detected anything yet
+        
+        time_since_detection = (self.get_clock().now() - self._last_detection_time).nanoseconds / 1e9
+        if time_since_detection > self._detection_timeout:
+            # Target lost, stop the robot
+            self.teleop.set_velocity(linear_x=0.0, angular_z=0.0)
+            self.get_logger().info(f"Target lost for {time_since_detection:.2f}s, stopping robot")
+            self._last_detection_time = None  # Reset so we don't spam logs
+    
     def shutdown(self):
         """Clean shutdown of the server."""
         self.get_logger().info("Shutting down ML6 Server...")
         self.yolo_timer.cancel()
+        self.check_timer.cancel()
         self.yolo_publisher.shutdown()
         self.teleop.shutdown()
 

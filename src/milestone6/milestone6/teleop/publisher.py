@@ -69,9 +69,10 @@ class TeleopPublisher:
         # Current velocity command
         self.cmd_vel = Twist()
 
-        # Start moveit interface (optional)
-        self.connect_moveit_servo()
-        self.start_moveit_servo()
+        # MoveIt servo interface (optional, not needed for autonomous navigation)
+        # Uncomment if you need advanced servo control:
+        # self.connect_moveit_servo()
+        # self.start_moveit_servo()
 
     def connect_moveit_servo(self):
         """Connect to MoveIt servo services."""
@@ -252,7 +253,7 @@ class TeleopPublisher:
         """Shutdown the teleop publisher."""
         self._node.get_logger().info('Shutting down teleop publisher...')
         self.stop()
-        self.stop_moveit_servo()
+        # self.stop_moveit_servo()  # Only needed if servo was started
         self.pub_timer.cancel()
         self.pub_timer = None
 
