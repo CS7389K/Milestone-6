@@ -1,43 +1,120 @@
 # Milestone 6
 
-To complete this milestone, you would need to adapt [Milestone 3](https://github.com/CS7389K/Milestone-3)’s teleoperation code, [Milestone 4](https://github.com/CS7389K/Milestone-4)’s code for YOLO, and [Milestone 5](https://github.com/CS7389K/Milestone-5)’s code for LlaMa and integrate them into the code for both the remote PC, Turtlebot Jetson, and Secondary Jetson.
+[![ROS2](https://img.shields.io/badge/ROS2-Foxy-blue.svg)](https://docs.ros.org/en/foxy/)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![Ubuntu](https://img.shields.io/badge/Ubuntu-20.04-orange.svg)](https://ubuntu.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Helpful Guides
+> An integrated ROS2 robotics system combining teleoperation, computer vision (YOLO), and AI-powered natural language interaction (LLaMA) for Turtlebot platforms.
 
-### Foxy
-- [Installation](https://docs.ros.org/en/foxy/Installation/Ubuntu-Install-Debians.html)
-- [Building Packages](https://docs.ros.org/en/foxy/Tutorials/Beginner-Client-Libraries/Colcon-Tutorial.html)
+## Table of Contents
 
-## Development Environment
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Building](#building)
+- [Usage](#usage)
+- [Resources](#resources)
+- [License](#license)
 
-### Setup
+## Overview
 
-1. Clone the repository
-```sh
+Milestone 6 integrates multiple ROS2 subsystems to create a comprehensive robotics platform. This project combines:
+
+- **Teleoperation** ([Milestone 3](https://github.com/CS7389K/Milestone-3)): Command-line interface for robot control
+- **Computer Vision** ([Milestone 4](https://github.com/CS7389K/Milestone-4)): YOLO-based object detection
+- **AI Interaction** ([Milestone 5](https://github.com/CS7389K/Milestone-5)): LLaMA integration for natural language processing
+
+The system is designed to run across multiple devices: a remote PC, Turtlebot Jetson, and Secondary Jetson.
+
+## Prerequisites
+
+- **Operating System**: Ubuntu 20.04 LTS
+- **ROS2**: Foxy
+- **Python**: 3.8
+- **Hardware**: 
+  - Remote PC
+  - Turtlebot with a Jetson
+  - Secondary Jetson (optional)
+
+## Installation
+
+### 1. Clone the Repository
+
+```bash
 git clone https://github.com/CS7389K/Milestone-6.git
 cd Milestone-6
 ```
 
-2. ROS2 Foxy requires Ubuntu 20.04, so ensure it's what you're using. If you're using windows, run the following to use WSL:
-```sh
+### 2. Set Up Ubuntu 20.04
+
+ROS2 Foxy requires Ubuntu 20.04. If you're using Windows, set up WSL2:
+
+```bash
 wsl --install -d Ubuntu-20.04
 ```
 
-If you need to move WSL to a different drive (e.g. the F drive):
-```
+**Optional**: Move WSL to a different drive (e.g., F: drive):
+
+```bash
 wsl --manage Ubuntu-20.04 --move F:\WSL
 ```
 
-3. Install Foxy
-```sh
+### 3. Install ROS2 Foxy
+
+Run the installation script provided in the repository:
+
+```bash
 sh install-ros2-foxy-desktop.sh
 ```
 
-### Building the Project
+Alternatively, follow the [official ROS2 Foxy installation guide](https://docs.ros.org/en/foxy/Installation/Ubuntu-Install-Debians.html).
 
-Ensure you are in the project's root directory, then run:
+## Building
 
-```sh
+Navigate to the project root directory and build the workspace:
+
+```bash
 colcon build --symlink-install
-. install/setup.sh
+source install/setup.bash
 ```
+
+## Usage
+
+After building the project, source the workspace in each terminal session:
+
+```bash
+source install/setup.bash
+```
+
+### Running the Server
+
+```bash
+ros2 run milestone6 server
+```
+
+### Running the Client
+
+```bash
+ros2 run milestone6 client
+```
+## Resources
+
+### ROS2 Foxy Documentation
+
+- [Installation Guide](https://docs.ros.org/en/foxy/Installation/Ubuntu-Install-Debians.html)
+- [Building Packages with Colcon](https://docs.ros.org/en/foxy/Tutorials/Beginner-Client-Libraries/Colcon-Tutorial.html)
+- [ROS2 Actions](https://docs.ros.org/en/foxy/Tutorials/Intermediate/Creating-an-Action.html)
+
+### Python & Development
+
+- [Python 3.8 Documentation](https://docs.python.org/3.8/)
+- [ROS2 Python Client Library](https://docs.ros.org/en/foxy/Tutorials/Beginner-Client-Libraries/Writing-A-Simple-Py-Publisher-And-Subscriber.html)
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+**Built with ❤️ using ROS2 Foxy and Python 3.8**
