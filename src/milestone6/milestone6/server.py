@@ -56,6 +56,7 @@ class ML6Server(Node):
         self._bbox_threshold = self.get_parameter('min_bbox_width').value
         self._forward_speed = self.get_parameter('forward_speed').value
         self._turn_speed_max = self.get_parameter('turn_speed_max').value
+        self._display = self.get_parameter('display').value
         self._track_class = self.get_parameter('track_class').value
         
         self.get_logger().info("Initializing ML6 Server Node...")
@@ -74,7 +75,7 @@ class ML6Server(Node):
             yolo_model=self._yolo_model,
             image_width=self._image_width,
             image_height=self._image_height,
-            display=True
+            display=self._display
         )
         self.yolo_timer = self.create_timer(0.1, self._yolo_step_callback)
         

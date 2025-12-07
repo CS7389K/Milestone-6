@@ -77,40 +77,40 @@ class TeleopPublisher:
         """Connect to MoveIt servo services."""
         for i in range(10):
             if self.servo_start_client.wait_for_service(timeout_sec=1.0):
-                self._node.get_logger().info('SUCCESS TO CONNECT SERVO START SERVER')
+                self.get_logger().info('SUCCESS TO CONNECT SERVO START SERVER')
                 break
-            self._node.get_logger().warn('WAIT TO CONNECT SERVO START SERVER')
+            self.get_logger().warn('WAIT TO CONNECT SERVO START SERVER')
             if i == 9:
-                self._node.get_logger().error(
+                self.get_logger().error(
                     "fail to connect moveit_servo. please launch 'servo.launch' from the MoveIt config package."
                 )
 
         for i in range(10):
             if self.servo_stop_client.wait_for_service(timeout_sec=1.0):
-                self._node.get_logger().info('SUCCESS TO CONNECT SERVO STOP SERVER')
+                self.get_logger().info('SUCCESS TO CONNECT SERVO STOP SERVER')
                 break
-            self._node.get_logger().warn('WAIT TO CONNECT SERVO STOP SERVER')
+            self.get_logger().warn('WAIT TO CONNECT SERVO STOP SERVER')
             if i == 9:
-                self._node.get_logger().error(
+                self.get_logger().error(
                     "fail to connect moveit_servo. please launch 'servo.launch' from the MoveIt config package."
                 )
 
     def start_moveit_servo(self):
-        """Start the MoveIt servo service."""
-        self._node.get_logger().info("call 'moveit_servo' start srv.")
+        """Start MoveIt servo interface."""
+        self.get_logger().info("call 'moveit_servo' start srv.")
         if not self.servo_start_client.service_is_ready():
-            self._node.get_logger().warn("start_servo service not ready; continuing without moveit_servo.")
+            self.get_logger().warn("start_servo service not ready; continuing without moveit_servo.")
             return
         future = self.servo_start_client.call_async(Trigger.Request())
         rclpy.spin_until_future_complete(self._node, future, timeout_sec=1.0)
         if future.done() and future.result():
-            self._node.get_logger().info("SUCCESS to start 'moveit_servo'")
+            self.get_logger().info("SUCCESS to start 'moveit_servo'")
         else:
-            self._node.get_logger().error("FAIL to start 'moveit_servo', executing without 'moveit_servo'")
+            self.get_logger().error("FAIL to start 'moveit_servo', executing without 'moveit_servo'")
 
     def stop_moveit_servo(self):
-        """Stop the MoveIt servo service."""
-        self._node.get_logger().info("call 'moveit_servo' END srv.")
+        """Shutdown MoveIt servo interface."""
+        self.get_logger().info("call 'moveit_servo' END srv.")
         if not self.servo_stop_client.service_is_ready():
             return
         future = self.servo_stop_client.call_async(Trigger.Request())
@@ -252,8 +252,10 @@ class TeleopPublisher:
         """Shutdown the teleop publisher."""
         self._node.get_logger().info('Shutting down teleop publisher...')
         self.stop()
-        if hasattr(self, 'pub_timer') and self.pub_timer is not None:
-            self.pub_timer.cancel()
-            self.pub_timer = None
         self.stop_moveit_servo()
+        self.pub_timer.cancel()
+        self.pub_timer = None
 
+    def get_logger(self):
+        """Get the node's logger."""
+        return self._node.get_logger()
