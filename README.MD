@@ -11,6 +11,7 @@
 
 - [Overview](#overview)
 - [Prerequisites](#prerequisites)
+- [Running](#running)
 - [Installation](#installation)
 - [Building](#building)
 - [Usage](#usage)
@@ -36,6 +37,24 @@ The system is designed to run across multiple devices: a remote PC, Turtlebot Je
   - Remote PC
   - Turtlebot with a Jetson
   - Secondary Jetson (optional)
+
+## Running
+
+### Terminal 1: Launch the TurtleBot3 base (creates /cmd_vel topic)
+```sh
+ros2 launch turtlebot3_bringup robot.launch.py
+```
+
+### Terminal 2: Launch the OpenManipulator arm
+```sh
+ros2 launch turtlebot3_manipulation_bringup hardware.launch.py
+```
+
+### Terminal 3: Launch server.py
+
+```sh
+ros2 launch milestone6 server
+```
 
 ## Installation
 
@@ -118,3 +137,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Built with ❤️ using ROS2 Foxy and Python 3.8**
+
