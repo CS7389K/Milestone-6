@@ -21,17 +21,9 @@ import json
 from std_msgs.msg import String
 
 import cv2
-from dataclasses import dataclass
 from ultralytics import YOLO
 
-
-@dataclass
-class FrameData:
-    """Class representing captured image frame data."""
-    frame: cv2.Mat
-    results: list
-    start: float
-    end: float
+from .yolo_data import YOLOData
 
 
 class YOLOPublisher:
@@ -92,19 +84,35 @@ class YOLOPublisher:
             results = self.model(frame)
             end_time = time.time()
 
-            frame_data = FrameData(
-                frame = frame,
-                start = start_time,
-                results = results,
-                end = end_time
-            )
-
-            # Publish frame data
-            data = frame_data.results
-            msg = String()
-            msg.data = json.dumps(data.__dict__)
-            self._publisher.publish(msg)
-            self.get_logger().info(f"Publishing: {msg.data}")
+            # Extract and publish detection data
+            if len(results) > 0 and hasattr(results[0], 'boxes') and results[0].boxes is not None:
+                boxes = results[0].boxes
+                if len(boxes) > 0:
+                    # Get first detection
+                    box = boxes[0]
+                    x1, y1, x2, y2 = map(float, box.xyxy[0].cpu().numpy())
+                    cls = int(box.cls[0].cpu().numpy())
+                    
+                    # Create YOLOData object
+                    yolo_data = YOLOData(
+                        bbox_x=x1,
+                        bbox_y=y1,
+                        bbox_w=x2 - x1,
+                        bbox_h=y2 - y1,
+                        clz=cls
+                    )
+                    
+                    # Serialize and publish
+                    msg = String()
+                    msg.data = json.dumps({
+                        'bbox_x': yolo_data.bbox_x,
+                        'bbox_y': yolo_data.bbox_y,
+                        'bbox_w': yolo_data.bbox_w,
+                        'bbox_h': yolo_data.bbox_h,
+                        'clz': yolo_data.clz
+                    })
+                    self._publisher.publish(msg)
+                    self.get_logger().info(f"Publishing: {msg.data}")
             
             # Display frame with detections if enabled
             if self._display:
