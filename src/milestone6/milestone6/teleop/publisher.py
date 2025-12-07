@@ -252,5 +252,8 @@ class TeleopPublisher:
         """Shutdown the teleop publisher."""
         self._node.get_logger().info('Shutting down teleop publisher...')
         self.stop()
+        if hasattr(self, 'pub_timer') and self.pub_timer is not None:
+            self.pub_timer.cancel()
+            self.pub_timer = None
         self.stop_moveit_servo()
 

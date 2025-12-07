@@ -57,8 +57,7 @@ class YOLOPublisher:
             self,
             node,
             callback = None,
-            publish_period : float = 0.5,
-            yolo_model : str = "models/yolov11n.hef",
+            yolo_model : str = "./models/yolov11n.hef",
             image_width: int = 500,
             image_height: int = 320,
             display: bool = True,
@@ -71,7 +70,6 @@ class YOLOPublisher:
         self._publisher = node.create_publisher(
             String, 'yolo_topic', 10
         )
-        self._timer = self._node.create_timer(publish_period, self._publish_callback)
 
         self.get_logger().info("Opening camera...")
         pipeline = "".join(self._GSTREAMER_PIPELINE).format(
@@ -154,8 +152,12 @@ class YOLOPublisher:
         cv2.waitKey(1)  # Process events to keep window responsive
     
     def shutdown(self):
-        self._capture.release()
-        cv2.destroyAllWindows()
+        """Clean up resources."""
+        if hasattr(self, '_capture') and self._capture is not None:
+            self._capture.release()
+        if self._display:
+            cv2.destroyAllWindows()
+        self.get_logger().info("YOLO Publisher shutdown complete.")
 
     def get_logger(self):
         return self._node.get_logger()

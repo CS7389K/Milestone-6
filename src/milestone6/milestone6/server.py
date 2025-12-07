@@ -39,7 +39,7 @@ class ML6Server(Node):
         super().__init__('m6_server')
         self.declare_parameter('image_width', 500)
         self.declare_parameter('image_height', 320)
-        self.declare_parameter('yolo_model', 'models/yolov11n.hef')
+        self.declare_parameter('yolo_model', './models/yolov11n.hef')
         self.declare_parameter('tolerance', 50)
         self.declare_parameter('min_bbox_width', 150)
         self.declare_parameter('forward_speed', 0.15)
@@ -61,7 +61,6 @@ class ML6Server(Node):
         # Initialize YOLO publisher (captures and processes camera frames)
         self.yolo_publisher = YOLOPublisher(
             self,
-            publish_period=0.5,
             yolo_model=self._yolo_model,
             image_width=self._image_width,
             image_height=self._image_height,
@@ -134,8 +133,15 @@ class ML6Server(Node):
     def shutdown(self):
         """Clean shutdown of the server."""
         self.get_logger().info("Shutting down ML6 Server...")
-        self.teleop.shutdown()
-        self.yolo_publisher.shutdown()
+        # Cancel timer first
+        if hasattr(self, 'yolo_timer') and self.yolo_timer is not None:
+            self.yolo_timer.cancel()
+            self.yolo_timer = None
+        # Then shutdown subsystems
+        if hasattr(self, 'teleop'):
+            self.teleop.shutdown()
+        if hasattr(self, 'yolo_publisher'):
+            self.yolo_publisher.shutdown()
 
 
 def main(args=None):
