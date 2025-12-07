@@ -40,8 +40,8 @@ class YOLOPublisher:
     """
     _GSTREAMER_PIPELINE =  (
         'nvarguscamerasrc sensor-id=0 ! video/x-raw(memory:NVMM), ',
-        'width={image_width}, height={image_height}, framerate=30/1, format=NV12 ! ',
-        'nvvidconv ! video/x-raw,format=BGRx,width=500,height=320 ! ',
+        'width={image_width},height={image_height},framerate=30/1,format=NV12 ! ',
+        'nvvidconv ! video/x-raw,format=BGRx,width={image_width},height={image_height} ! ',
         'videoconvert ! video/x-raw,format=BGR ! appsink drop=1'
     )
 
@@ -66,7 +66,9 @@ class YOLOPublisher:
             image_width=image_width,
             image_height=image_height
         )
+        self.get_logger().info(f"GStreamer pipeline: {pipeline}")
         self._capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+        self.get_logger().info(f"Camera opened: {self._capture.isOpened()}")
         if not self._capture.isOpened():
             raise RuntimeError("Error: Unable to open camera")
 

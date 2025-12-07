@@ -59,10 +59,9 @@ class ML6Server(Node):
         self._display = self.get_parameter('display').value
         self._track_class = self.get_parameter('track_class').value
         
+        class_name = COCO_CLASSES.get(self._track_class, 'unknown')
         self.get_logger().info("Initializing ML6 Server Node...")
-        self.get_logger().info(f"Tracking COCO class: \
-                               '{COCO_CLASSES.get(self._track_class, 'unknown')}' \
-                                (ID: {self._track_class})")
+        self.get_logger().info(f"Tracking COCO class: '{class_name}' (ID: {self._track_class})")
 
         # Initialize teleop publisher (handles all movement commands)
         self.get_logger().info("Starting Teleop Publisher...")
