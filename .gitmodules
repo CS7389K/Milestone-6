@@ -1,0 +1,9 @@
+[submodule "previous_milestones/Milestone-3"]
+	path = previous_milestones/Milestone-3
+	url = https://github.com/CS7389K/Milestone-3.git
+[submodule "previous_milestones/Milestone-4"]
+	path = previous_milestones/Milestone-4
+	url = https://github.com/CS7389K/Milestone-4.git
+[submodule "previous_milestones/Milestone-5"]
+	path = previous_milestones/Milestone-5
+	url = https://github.com/CS7389K/Milestone-5.git
