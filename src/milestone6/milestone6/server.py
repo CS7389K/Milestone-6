@@ -56,7 +56,7 @@ class ML6Server(Node):
         self.get_logger().info("Initializing ML6 Server Node...")
         
         # Initialize teleop publisher (handles all movement commands)
-        self.teleop = TeleopPublisher(self)
+        # self.teleop = TeleopPublisher(self)
         
         # Initialize YOLO publisher (captures and processes camera frames)
         self.yolo_publisher = YOLOPublisher(
@@ -97,38 +97,38 @@ class ML6Server(Node):
         self.get_logger().info(f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
         
         # Calculate bounding box center
-        bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
+        # bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
         
-        # Calculate image center
-        image_center_x = self._image_width / 2.0
+        # # Calculate image center
+        # image_center_x = self._image_width / 2.0
         
-        # Calculate horizontal offset from center
-        offset_x = bbox_center_x - image_center_x
+        # # Calculate horizontal offset from center
+        # offset_x = bbox_center_x - image_center_x
         
-        # Determine angular velocity (turn towards object)
-        # Positive offset (object on right) -> turn right (negative angular)
-        # Negative offset (object on left) -> turn left (positive angular)
-        if abs(offset_x) > self._tolerance:
-            # Normalize offset to [-1, 1] range
-            angular_ratio = -offset_x / (self._image_width / 2.0)
-            angular_ratio = max(-1.0, min(1.0, angular_ratio))  # clamp
-            angular_vel = angular_ratio * self._turn_speed_max
-            self.get_logger().info(f"Turning: offset={offset_x:.1f}px, angular_vel={angular_vel:.3f} rad/s")
-        else:
-            angular_vel = 0.0
-            self.get_logger().info("Object centered horizontally")
+        # # Determine angular velocity (turn towards object)
+        # # Positive offset (object on right) -> turn right (negative angular)
+        # # Negative offset (object on left) -> turn left (positive angular)
+        # if abs(offset_x) > self._tolerance:
+        #     # Normalize offset to [-1, 1] range
+        #     angular_ratio = -offset_x / (self._image_width / 2.0)
+        #     angular_ratio = max(-1.0, min(1.0, angular_ratio))  # clamp
+        #     angular_vel = angular_ratio * self._turn_speed_max
+        #     self.get_logger().info(f"Turning: offset={offset_x:.1f}px, angular_vel={angular_vel:.3f} rad/s")
+        # else:
+        #     angular_vel = 0.0
+        #     self.get_logger().info("Object centered horizontally")
         
-        # Determine linear velocity (move forward if object is far)
-        if data.bbox_w < self._bbox_threshold:
-            linear_vel = self._forward_speed
-            self.get_logger().info(f"Moving forward: bbox_w={data.bbox_w:.1f}px")
-        else:
-            # Object is large (close), stop
-            linear_vel = 0.0
-            self.get_logger().info(f"Object is close, stopping: bbox_w={data.bbox_w:.1f}px")
+        # # Determine linear velocity (move forward if object is far)
+        # if data.bbox_w < self._bbox_threshold:
+        #     linear_vel = self._forward_speed
+        #     self.get_logger().info(f"Moving forward: bbox_w={data.bbox_w:.1f}px")
+        # else:
+        #     # Object is large (close), stop
+        #     linear_vel = 0.0
+        #     self.get_logger().info(f"Object is close, stopping: bbox_w={data.bbox_w:.1f}px")
         
-        # Update teleop velocity command
-        self.teleop.set_velocity(linear_x=linear_vel, angular_z=angular_vel)
+        # # Update teleop velocity command
+        # self.teleop.set_velocity(linear_x=linear_vel, angular_z=angular_vel)
     
     def shutdown(self):
         """Clean shutdown of the server."""
@@ -138,8 +138,8 @@ class ML6Server(Node):
             self.yolo_timer.cancel()
             self.yolo_timer = None
         # Then shutdown subsystems
-        if hasattr(self, 'teleop'):
-            self.teleop.shutdown()
+        # if hasattr(self, 'teleop'):
+        #     self.teleop.shutdown()
         if hasattr(self, 'yolo_publisher'):
             self.yolo_publisher.shutdown()
 
