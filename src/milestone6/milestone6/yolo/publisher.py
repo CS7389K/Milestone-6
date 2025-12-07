@@ -60,7 +60,6 @@ class YOLOPublisher:
             image_width: int = 500,
             image_height: int = 320,
             display: bool = True,
-            publish_period: float = 0.5
         ):
         self._node = node
         self._display = display
@@ -92,7 +91,7 @@ class YOLOPublisher:
             start_time = time.time()
             results = self.model(frame)
             end_time = time.time()
-            
+
             frame_data = FrameData(
                 frame = frame,
                 start = start_time,
@@ -101,8 +100,9 @@ class YOLOPublisher:
             )
 
             # Publish frame data
+            data = frame_data.results
             msg = String()
-            msg.data = json.dumps(frame_data.__dict__)
+            msg.data = json.dumps(data.__dict__)
             self._publisher.publish(msg)
             self.get_logger().info(f"Publishing: {msg.data}")
             

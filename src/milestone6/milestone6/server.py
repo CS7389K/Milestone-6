@@ -56,9 +56,11 @@ class ML6Server(Node):
         self.get_logger().info("Initializing ML6 Server Node...")
         
         # Initialize teleop publisher (handles all movement commands)
+        self.get_logger().info("Starting Teleop Publisher...")
         self.teleop = TeleopPublisher(self)
         
         # Initialize YOLO publisher (captures and processes camera frames)
+        self.get_logger().info("Starting YOLO Publisher...")
         self.yolo_publisher = YOLOPublisher(
             self,
             yolo_model=self._yolo_model,
@@ -69,10 +71,10 @@ class ML6Server(Node):
         self.yolo_timer = self.create_timer(0.1, self._yolo_step_callback)
         
         # Initialize YOLO subscriber (receives detection results)
+        self.get_logger().info("Starting YOLO Subscriber...")
         self.yolo_subscriber = YOLOSubscriber(self, self._yolo_callback)
 
         self.get_logger().info("ML6 Server Node has been started.")
-        self.get_logger().info("Waiting for YOLO detections to move robot towards objects...")
 
     def _yolo_step_callback(self):
         """Step the YOLO publisher to process next frame."""
