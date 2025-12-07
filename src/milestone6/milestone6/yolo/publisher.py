@@ -80,6 +80,11 @@ class YOLOPublisher:
             self.get_logger().info("Display window created. Press 'q' to close.")
 
     def step(self):
+        # Check if camera is still open
+        if not self._capture.isOpened():
+            self.get_logger().error("Camera is not open!")
+            return
+        
         ok, frame = self._capture.read()
         if not ok:
             self.get_logger().warn("Failed to read frame from camera")
@@ -153,15 +158,38 @@ class YOLOPublisher:
         cv2.putText(display_frame, fps_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         
         # Show frame
-        cv2.imshow('YOLO Detection', display_frame)
-        cv2.waitKey(1)  # Process events to keep window responsive
+        try:
+            cv2.imshow('YOLO Detection', display_frame)
+            cv2.waitKey(1)  # Process events to keep window responsive
+        except cv2.error as e:
+            self.get_logger().warn(f"Display error: {e}")
+            self._display = False  # Disable display if window fails
     
     def shutdown(self):
         """Clean up resources."""
-        self._capture.release()
+        self.get_logger().info("Shutting down YOLO Publisher...")
+        
+        # Release camera capture
+        if self._capture is not None and self._capture.isOpened():
+            self._capture.release()
+            self.get_logger().info("Camera released")
+            time.sleep(0.5)
+        
+        # Destroy OpenCV windows
         if self._display:
             cv2.destroyAllWindows()
         self.get_logger().info("YOLO Publisher shutdown complete.")
+    
+    def __del__(self):
+        """Destructor to ensure cleanup happens even if shutdown() isn't called."""
+        try:
+            if hasattr(self, '_capture') and self._capture is not None:
+                if self._capture.isOpened():
+                    self._capture.release()
+            if hasattr(self, '_display') and self._display:
+                cv2.destroyAllWindows()
+        except Exception:
+            pass  # Ignore errors during cleanup
 
     def get_logger(self):
         return self._node.get_logger()
