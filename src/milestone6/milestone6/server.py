@@ -19,11 +19,11 @@
 import rclpy
 from rclpy.node import Node
 
+from .teleop.publisher import TeleopPublisher
+
 from .yolo.publisher import YOLOPublisher
 from .yolo.subscriber import YOLOSubscriber
 from .yolo.yolo_data import YOLOData
-
-from .teleop.publisher import TeleopPublisher
 
 
 class ML6Server(Node):
