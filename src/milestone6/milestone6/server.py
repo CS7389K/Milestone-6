@@ -39,7 +39,7 @@ class ML6Server(Node):
         super().__init__('m6_server')
         self.declare_parameter('image_width', 500)
         self.declare_parameter('image_height', 320)
-        self.declare_parameter('yolo_model', 'yolov11n.hef')
+        self.declare_parameter('yolo_model', 'models/yolov11n.hef')
         self.declare_parameter('tolerance', 50)
         self.declare_parameter('min_bbox_width', 150)
         self.declare_parameter('forward_speed', 0.15)
