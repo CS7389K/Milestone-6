@@ -14,12 +14,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-
-import json
 
 from .yolo_data import YOLOData
 
@@ -38,21 +37,27 @@ class YOLOSubscriber:
     """
 
     def __init__(self, node, callback=None):
-        
+        """Initializes the YOLO Subscriber Node."""
         self._node = node
         self._callback = callback
         self._subscription = node.create_subscription(
-            String,
-            'yolo_topic',
-            self._listener_callback,
-            10
+            String, 'yolo_topic', self._listener_callback, 10
         )
 
     def _listener_callback(self, msg):
+        """Parse YOLO JSON data and invoke user callback."""
         try:
-            data = YOLOData(**json.loads(msg.data))
-            self._node.get_logger().info(f"Received: {str(data)}")
-        except json.JSONDecodeError:
-            self.get_logger().error(f"Failed to decode JSON: {msg.data}")
-        
-        return data
+            data_dict = json.loads(msg.data)
+            yolo_data = YOLOData(
+                bbox_x=data_dict.get('bbox_x', 0.0),
+                bbox_y=data_dict.get('bbox_y', 0.0),
+                bbox_w=data_dict.get('bbox_w', 0.0),
+                bbox_h=data_dict.get('bbox_h', 0.0),
+                clz=data_dict.get('clz', 0)
+            )
+            if self._callback:
+                self._callback(yolo_data)
+        except json.JSONDecodeError as e:
+            self._node.get_logger().error(f'Failed to decode YOLO JSON: {e}')
+        except Exception as e:
+            self._node.get_logger().error(f'Error in YOLO callback: {e}')

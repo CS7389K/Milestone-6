@@ -14,36 +14,148 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.import time
+# limitations under the License.
+
 import rclpy
-from rclpy.action import ActionServer
 from rclpy.node import Node
 
-from .subscribers.yolo import YOLOSubscriber
+from .yolo.publisher import YOLOPublisher
+from .yolo.subscriber import YOLOSubscriber
+from .yolo.yolo_data import YOLOData
+
+from .teleop.publisher import TeleopPublisher
 
 
 class ML6Server(Node):
     """
+    ML6 Server Node for autonomous robot control.
+    
+    Integrates YOLO object detection with teleoperation control
+    to enable autonomous navigation towards detected objects.
+    
     Message Types: https://docs.ros2.org/foxy/api/std_msgs/index-msg.html
     """
     def __init__(self):
         super().__init__('m6_server')
-        self.yolo_subscriber = YOLOSubscriber()
-        self.get_logger().info("ML6 Server Node has been started.")
+        self.declare_parameter('image_width', 500)
+        self.declare_parameter('image_height', 320)
+        self.declare_parameter('yolo_model', 'yolov11n.hef')
+        self.declare_parameter('tolerance', 50)
+        self.declare_parameter('min_bbox_width', 150)
+        self.declare_parameter('forward_speed', 0.15)
+        self.declare_parameter('turn_speed_max', 1.5)
 
+        self._image_width = self.get_parameter('image_width').value
+        self._image_height = self.get_parameter('image_height').value
+        self._yolo_model  = self.get_parameter('yolo_model').value
+        self._tolerance = self.get_parameter('tolerance').value 
+        self._bbox_threshold = self.get_parameter('min_bbox_width').value
+        self._forward_speed = self.get_parameter('forward_speed').value
+        self._turn_speed_max = self.get_parameter('turn_speed_max').value
+        
+        self.get_logger().info("Initializing ML6 Server Node...")
+        
+        # Initialize teleop publisher (handles all movement commands)
+        self.teleop = TeleopPublisher(self)
+        
+        # Initialize YOLO publisher (captures and processes camera frames)
+        self.yolo_publisher = YOLOPublisher(
+            self,
+            publish_period=0.5,
+            yolo_model=self._yolo_model,
+            image_width=self._image_width,
+            image_height=self._image_height
+        )
+        
+        # Initialize YOLO subscriber (receives detection results)
+        self.yolo_subscriber = YOLOSubscriber(self, callback=self._yolo_callback)
+        
+        # Create timer to step YOLO processing
+        self.yolo_timer = self.create_timer(0.1, self._yolo_step_callback)
+        
+        self.get_logger().info("ML6 Server Node has been started.")
+        self.get_logger().info("Waiting for YOLO detections to move robot towards objects...")
+
+    def _yolo_step_callback(self):
+        """Step the YOLO publisher to process next frame."""
+        self.yolo_publisher.step()
+    
+    def _yolo_callback(self, data: YOLOData):
+        """
+        Process YOLO detection and move robot towards detected object.
+        
+        Strategy:
+        - Calculate bbox center position
+        - If object is left of center: turn left (positive angular.z)
+        - If object is right of center: turn right (negative angular.z)
+        - If object is small (far): move forward
+        - If object is large (close): stop
+        
+        Args:
+            data: YOLOData object containing detection information
+        """
+        self.get_logger().info(f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
+        
+        # Calculate bounding box center
+        bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
+        
+        # Calculate image center
+        image_center_x = self.IMAGE_WIDTH / 2.0
+        
+        # Calculate horizontal offset from center
+        offset_x = bbox_center_x - image_center_x
+        
+        # Determine angular velocity (turn towards object)
+        # Positive offset (object on right) -> turn right (negative angular)
+        # Negative offset (object on left) -> turn left (positive angular)
+        if abs(offset_x) > self.IMAGE_CENTER_TOLERANCE:
+            # Normalize offset to [-1, 1] range
+            angular_ratio = -offset_x / (self.IMAGE_WIDTH / 2.0)
+            angular_ratio = max(-1.0, min(1.0, angular_ratio))  # clamp
+            angular_vel = angular_ratio * self.TURN_SPEED_MAX
+            self.get_logger().info(f"Turning: offset={offset_x:.1f}px, angular_vel={angular_vel:.3f} rad/s")
+        else:
+            angular_vel = 0.0
+            self.get_logger().info("Object centered horizontally")
+        
+        # Determine linear velocity (move forward if object is far)
+        if data.bbox_w < self.BBOX_SIZE_THRESHOLD:
+            linear_vel = self.FORWARD_SPEED
+            self.get_logger().info(f"Moving forward: bbox_w={data.bbox_w:.1f}px")
+        else:
+            # Object is large (close), stop
+            linear_vel = 0.0
+            self.get_logger().info(f"Object is close, stopping: bbox_w={data.bbox_w:.1f}px")
+        
+        # Update teleop velocity command
+        self.teleop.set_velocity(linear_x=linear_vel, angular_z=angular_vel)
+    
+    def shutdown(self):
+        """Clean shutdown of the server."""
+        self.get_logger().info("Shutting down ML6 Server...")
+        self.teleop.shutdown()
+        self.yolo_publisher.shutdown()
 
 
 def main(args=None):
     rclpy.init(args=args)
 
-    print("Initializing ML6 Server Node...")
-    server = ML6Server()
-    print("ML6 Server Node Initialized.")
-
-    rclpy.spin(server)
-
-    server.destroy_node()
-    rclpy.shutdown()
+    server = None
+    try:
+        print("Initializing ML6 Server Node...")
+        server = ML6Server()
+        print("ML6 Server Node Initialized.")
+        
+        rclpy.spin(server)
+    except KeyboardInterrupt:
+        print("\nShutting down ML6 Server...")
+    except Exception as e:
+        print(f"Error in ML6 Server: {e}")
+    finally:
+        if server:
+            server.shutdown()
+            server.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':
