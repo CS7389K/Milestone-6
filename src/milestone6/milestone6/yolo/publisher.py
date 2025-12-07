@@ -58,7 +58,7 @@ class YOLOPublisher:
             node,
             callback = None,
             publish_period : float = 0.5,
-            yolo_model : str = "yolov11n.hef",
+            yolo_model : str = "models/yolov11n.hef",
             image_width: int = 500,
             image_height: int = 320,
             display: bool = True,
