@@ -66,6 +66,7 @@ class ML6Server(Node):
             image_height=self._image_height,
             display=True
         )
+        self.yolo_timer = self.create_timer(0.1, self._yolo_step_callback)
         
         # Initialize YOLO subscriber (receives detection results)
         self.yolo_subscriber = YOLOSubscriber(self, self._yolo_callback)
@@ -130,15 +131,9 @@ class ML6Server(Node):
     def shutdown(self):
         """Clean shutdown of the server."""
         self.get_logger().info("Shutting down ML6 Server...")
-        # Cancel timer first
-        if hasattr(self, 'yolo_timer') and self.yolo_timer is not None:
-            self.yolo_timer.cancel()
-            self.yolo_timer = None
-        # Then shutdown subsystems
-        if hasattr(self, 'teleop'):
-            self.teleop.shutdown()
-        if hasattr(self, 'yolo_publisher'):
-            self.yolo_publisher.shutdown()
+        self.yolo_timer.cancel()
+        self.yolo_publisher.shutdown()
+        self.teleop.shutdown()
 
 
 def main(args=None):

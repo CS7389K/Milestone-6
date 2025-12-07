@@ -69,7 +69,6 @@ class YOLOPublisher:
         self._publisher = node.create_publisher(
             String, 'yolo_topic', 10
         )
-        self._timer = self._node.create_timer(publish_period, self._publish_callback)
 
         self.get_logger().info("Opening camera...")
         pipeline = "".join(self._GSTREAMER_PIPELINE).format(
@@ -82,37 +81,30 @@ class YOLOPublisher:
 
         self.get_logger().info("Loading YOLO model...")
         self.model = YOLO(yolo_model, task="detect")
-        self.frame_data = None
         
         if self._display:
             cv2.namedWindow('YOLO Detection', cv2.WINDOW_AUTOSIZE)
             self.get_logger().info("Display window created. Press 'q' to close.")
 
-    def _publish_callback(self):
-        if self.frame_data is not None:
-            # Get data from frame_data.results
-            data = self.frame_data.results
-            # Serialize data and publish
-            msg = String()
-            msg.data = json.dumps(data.__dict__)
-            self._publisher.publish(msg)
-            self.get_logger().info(f"Publishing: {msg.data}")
-
     def step(self):
         ok, frame = self._capture.read()
-        if not ok:
-            self.frame_data = None
-        else:
+        if ok:
             start_time = time.time()
             results = self.model(frame)
             end_time = time.time()
             
-            self.frame_data = FrameData(
+            frame_data = FrameData(
                 frame = frame,
                 start = start_time,
                 results = results,
                 end = end_time
             )
+
+            # Publish frame data
+            msg = String()
+            msg.data = json.dumps(frame_data.__dict__)
+            self._publisher.publish(msg)
+            self.get_logger().info(f"Publishing: {msg.data}")
             
             # Display frame with detections if enabled
             if self._display:
@@ -153,8 +145,7 @@ class YOLOPublisher:
     
     def shutdown(self):
         """Clean up resources."""
-        if hasattr(self, '_capture') and self._capture is not None:
-            self._capture.release()
+        self._capture.release()
         if self._display:
             cv2.destroyAllWindows()
         self.get_logger().info("YOLO Publisher shutdown complete.")
