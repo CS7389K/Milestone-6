@@ -56,20 +56,20 @@ class YOLOPublisher:
     def __init__(
             self,
             node,
-            callback = None,
-            yolo_model : str = "./models/yolov11n.hef",
+            yolo_model: str,
             image_width: int = 500,
             image_height: int = 320,
             display: bool = True,
+            publish_period: float = 0.5
         ):
         self._node = node
-        self._callback = callback
         self._display = display
         
         self.get_logger().info("Initializing YOLO Publisher Node...")
         self._publisher = node.create_publisher(
             String, 'yolo_topic', 10
         )
+        self._timer = self._node.create_timer(publish_period, self._publish_callback)
 
         self.get_logger().info("Opening camera...")
         pipeline = "".join(self._GSTREAMER_PIPELINE).format(
