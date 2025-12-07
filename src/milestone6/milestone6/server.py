@@ -60,7 +60,7 @@ class ML6Server(Node):
         
         self.get_logger().info("Initializing ML6 Server Node...")
         self.get_logger().info(f"Tracking COCO class: \
-                                '{COCO_CLASSES.get(self._track_class, 'unknown')}' \
+                               '{COCO_CLASSES.get(self._track_class, 'unknown')}' \
                                 (ID: {self._track_class})")
 
         # Initialize teleop publisher (handles all movement commands)
@@ -102,10 +102,10 @@ class ML6Server(Node):
         Args:
             data: YOLOData object containing detection information
         """
-        self.get_logger().debug(f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
+        self.get_logger().info(f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
 
         if data.clz != self._track_class:
-            self.get_logger().debug(f"Ignoring class {data.clz}, looking for {self._track_class}")
+            self.get_logger().info(f"Ignoring class {data.clz}, looking for {self._track_class}")
             return
 
         # Calculate bounding box center
@@ -155,10 +155,7 @@ def main(args=None):
 
     server = None
     try:
-        print("Initializing ML6 Server Node...")
         server = ML6Server()
-        print("ML6 Server Node Initialized.")
-        
         rclpy.spin(server)
     except KeyboardInterrupt:
         print("\nShutting down ML6 Server...")
