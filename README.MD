@@ -1,6 +1,6 @@
 # Milestone 6
 
-
+To complete this milestone, you would need to adapt [Milestone 3](https://github.com/CS7389K/Milestone-3)’s teleoperation code, [Milestone 4](https://github.com/CS7389K/Milestone-4)’s code for YOLO, and [Milestone 5](https://github.com/CS7389K/Milestone-5)’s code for LlaMa and integrate them into the code for both the remote PC, Turtlebot Jetson, and Secondary Jetson.
 
 ## Helpful Guides
 
