@@ -25,6 +25,8 @@ from .yolo.publisher import YOLOPublisher
 from .yolo.subscriber import YOLOSubscriber
 from .yolo.yolo_data import YOLOData
 
+from .coco import COCO_CLASSES
+
 
 class ML6Server(Node):
     """
@@ -44,6 +46,8 @@ class ML6Server(Node):
         self.declare_parameter('min_bbox_width', 150)
         self.declare_parameter('forward_speed', 0.15)
         self.declare_parameter('turn_speed_max', 1.5)
+        self.declare_parameter('display', True)
+        self.declare_parameter('track_class', 39)  # Default to "bottle"
 
         self._image_width = self.get_parameter('image_width').value
         self._image_height = self.get_parameter('image_height').value
@@ -52,9 +56,13 @@ class ML6Server(Node):
         self._bbox_threshold = self.get_parameter('min_bbox_width').value
         self._forward_speed = self.get_parameter('forward_speed').value
         self._turn_speed_max = self.get_parameter('turn_speed_max').value
+        self._track_class = self.get_parameter('track_class').value
         
         self.get_logger().info("Initializing ML6 Server Node...")
-        
+        self.get_logger().info(f"Tracking COCO class: \
+                                '{COCO_CLASSES.get(self._track_class, 'unknown')}' \
+                                (ID: {self._track_class})")
+
         # Initialize teleop publisher (handles all movement commands)
         self.get_logger().info("Starting Teleop Publisher...")
         self.teleop = TeleopPublisher(self)
@@ -94,17 +102,21 @@ class ML6Server(Node):
         Args:
             data: YOLOData object containing detection information
         """
-        self.get_logger().info(f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
-        
+        self.get_logger().debug(f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
+
+        if data.clz != self._track_class:
+            self.get_logger().debug(f"Ignoring class {data.clz}, looking for {self._track_class}")
+            return
+
         # Calculate bounding box center
         bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
-        
+
         # Calculate image center
         image_center_x = self._image_width / 2.0
-        
+
         # Calculate horizontal offset from center
         offset_x = bbox_center_x - image_center_x
-        
+
         # Determine angular velocity (turn towards object)
         # Positive offset (object on right) -> turn right (negative angular)
         # Negative offset (object on left) -> turn left (positive angular)
@@ -117,7 +129,7 @@ class ML6Server(Node):
         else:
             angular_vel = 0.0
             self.get_logger().info("Object centered horizontally")
-        
+
         # Determine linear velocity (move forward if object is far)
         if data.bbox_w < self._bbox_threshold:
             linear_vel = self._forward_speed
