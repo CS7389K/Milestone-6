@@ -64,7 +64,8 @@ class ML6Server(Node):
             publish_period=0.5,
             yolo_model=self._yolo_model,
             image_width=self._image_width,
-            image_height=self._image_height
+            image_height=self._image_height,
+            display=True
         )
         
         # Initialize YOLO subscriber (receives detection results)
@@ -100,7 +101,7 @@ class ML6Server(Node):
         bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
         
         # Calculate image center
-        image_center_x = self.IMAGE_WIDTH / 2.0
+        image_center_x = self._image_width / 2.0
         
         # Calculate horizontal offset from center
         offset_x = bbox_center_x - image_center_x
@@ -108,19 +109,19 @@ class ML6Server(Node):
         # Determine angular velocity (turn towards object)
         # Positive offset (object on right) -> turn right (negative angular)
         # Negative offset (object on left) -> turn left (positive angular)
-        if abs(offset_x) > self.IMAGE_CENTER_TOLERANCE:
+        if abs(offset_x) > self._tolerance:
             # Normalize offset to [-1, 1] range
-            angular_ratio = -offset_x / (self.IMAGE_WIDTH / 2.0)
+            angular_ratio = -offset_x / (self._image_width / 2.0)
             angular_ratio = max(-1.0, min(1.0, angular_ratio))  # clamp
-            angular_vel = angular_ratio * self.TURN_SPEED_MAX
+            angular_vel = angular_ratio * self._turn_speed_max
             self.get_logger().info(f"Turning: offset={offset_x:.1f}px, angular_vel={angular_vel:.3f} rad/s")
         else:
             angular_vel = 0.0
             self.get_logger().info("Object centered horizontally")
         
         # Determine linear velocity (move forward if object is far)
-        if data.bbox_w < self.BBOX_SIZE_THRESHOLD:
-            linear_vel = self.FORWARD_SPEED
+        if data.bbox_w < self._bbox_threshold:
+            linear_vel = self._forward_speed
             self.get_logger().info(f"Moving forward: bbox_w={data.bbox_w:.1f}px")
         else:
             # Object is large (close), stop

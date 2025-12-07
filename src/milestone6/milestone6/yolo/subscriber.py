@@ -16,8 +16,6 @@
 # limitations under the License.
 import json
 
-import rclpy
-from rclpy.node import Node
 from std_msgs.msg import String
 
 from .yolo_data import YOLOData
