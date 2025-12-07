@@ -1,155 +1,245 @@
-# Code taken from:
-# https://github.com/ros2/demos/blob/1d01c8e3d06644c0d706ef83697a68efda7d0ad4/action_tutorials/action_tutorials_py/action_tutorials_py/fibonacci_action_client.py
-#
 #!/usr/bin/env python3
-# Copyright 2019 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 import rclpy
-from rclpy.action import ActionClient
 from rclpy.node import Node
 
-from .util import (
-    record_audio_and_saveas,
-    get_user_input,
-    prompt_assistant
-)
-from interfaces.action import (
-    EspeakAction,
-    LlamaAction,
-    WhisperAction
-)
+# Import local modules for YOLO monitoring and teleop control
+from .yolo.subscriber import YOLOSubscriber
+from .yolo.yolo_data import YOLOData
+from .teleop.publisher import TeleopPublisher
+from .teleop.subscriber import TeleopSubscriber
 
 
-class ML5Client(Node):
+def get_user_input():
     """
-    Message Types: https://docs.ros2.org/foxy/api/std_msgs/index-msg.html
+    Helper function to get user input.
+    Returns None on EOF (Ctrl+D).
     """
-    def __init__(self):
-        super().__init__('m5_client')
-        self.declare_parameter('use_espeak', True)
-        self.declare_parameter('use_llama', False)
-        self.declare_parameter('use_whisper', True)
+    try:
+        return input()
+    except EOFError:
+        return None
 
-        self.use_espeak = self.get_parameter('use_espeak').value
-        self.use_llama = self.get_parameter('use_llama').value
-        self.use_whisper = self.get_parameter('use_whisper').value
 
-        if self.use_espeak:
-            self._espeak_client = ActionClient(self, EspeakAction, 'espeak_action')
-        if self.use_llama:
-            self._llama_client = ActionClient(self, LlamaAction, 'llama_action')
-        if self.use_whisper:
-            self._whisper_client = ActionClient(self, WhisperAction, 'whisper_action')
+class M6Client(Node):
+    """
+    Milestone 6 Client for remote robot monitoring and control.
+    
+    This client provides remote access to:
+    - YOLO object detection monitoring (subscribe to detections from server)
+    - Manual teleop control (override autonomous behavior)
+    
+    Usage:
+        # Basic monitoring (no manual control)
+        client = M6Client(use_teleop=False)
+        detection = client.get_latest_detection()
+        
+        # With manual control enabled
+        client = M6Client(use_teleop=True)
+        client.manual_control(linear_x=0.1, angular_z=0.0)
+        client.stop_robot()
+    """
+    
+    def __init__(self, use_yolo=True, use_teleop=False):
+        """
+        Initialize the M6 Client.
+        
+        Args:
+            use_yolo (bool): Enable YOLO detection monitoring
+            use_teleop (bool): Enable manual teleop control (overrides autonomous)
+        """
+        super().__init__('m6_client')
+        
+        # Store feature flags
+        self.use_yolo = use_yolo
+        self.use_teleop = use_teleop
+        
+        # YOLO detection tracking
+        self.latest_detection = None
+        
+        # Initialize YOLO subscriber to monitor detections from server
+        if self.use_yolo:
+            self.yolo_subscriber = YOLOSubscriber(self, callback=self._yolo_callback)
+            self.get_logger().info("YOLO subscriber initialized - monitoring detections")
+        
+        # Initialize teleop publisher for manual control
+        if self.use_teleop:
+            self.teleop_subscriber = TeleopSubscriber(self)
+            self.teleop = TeleopPublisher(self, teleop_subscriber=self.teleop_subscriber)
+            self.get_logger().info("Teleop control initialized - manual control enabled")
+            self.get_logger().warn("Manual teleop will override autonomous behavior!")
+        
+        self.get_logger().info("M6 Client node initialized")
 
-    def _request_blocking(
-            self,
-            client,
-            ActionType,
-            request_attr,
-            request_msg
-        ):
-        request = ActionType.Goal()
-        setattr(request, request_attr, request_msg)
-
-        client.wait_for_server()
-        send_goal_future = client.send_goal_async(
-            request,
-            feedback_callback=self._feedback_callback
+    def _yolo_callback(self, data: YOLOData):
+        """
+        Callback for receiving YOLO detections from the server.
+        
+        Args:
+            data: YOLOData object containing detection information
+        """
+        self.latest_detection = data
+        self.get_logger().info(
+            f"[YOLO] Class: {data.clz}, "
+            f"BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, "
+            f"{data.bbox_w:.1f}x{data.bbox_h:.1f})"
         )
-        rclpy.spin_until_future_complete(self, send_goal_future)
-        goal_handle = send_goal_future.result()
 
-        if not goal_handle.accepted:
-            self.get_logger().warn(f"{str(type(ActionType))} request rejected")
-            return None
+    def get_latest_detection(self):
+        """
+        Get the most recent YOLO detection.
+        
+        Returns:
+            YOLOData object or None if no detection received yet
+        """
+        return self.latest_detection
+    
+    def manual_control(self, linear_x: float = 0.0, angular_z: float = 0.0):
+        """
+        Send manual velocity command to robot.
+        
+        Args:
+            linear_x: Linear velocity in x direction (m/s)
+            angular_z: Angular velocity around z axis (rad/s)
+        """
+        if not self.use_teleop:
+            self.get_logger().warn("Teleop not enabled. Initialize with use_teleop=True")
+            return
+        
+        self.teleop.set_velocity(linear_x=linear_x, angular_z=angular_z)
+        self.get_logger().info(f"Manual control: linear={linear_x:.3f}, angular={angular_z:.3f}")
 
-        self.get_logger().info(f"{str(type(ActionType))} request accepted")
-
-        result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future)
-        result = result_future.result().result
-
-        return result
-
-    def _feedback_callback(self, feedback_msg):
-        feedback = feedback_msg.feedback
-        self.get_logger().info('Received feedback: {0}'.format(feedback))
-
-    def __call__(
-            self,
-            client : str,
-            request : str
-    ):
-        assert client in ['espeak', 'llama', 'whisper'], \
-            f"Client must be one of 'espeak', 'llama', or 'whisper', got '{client}'"
-
-        result = None
-        if client == 'espeak' and self.use_espeak:
-            result = self._request_blocking(
-                self._espeak_client, EspeakAction, 'text', request
-            ).result
-        elif client == 'llama' and self.use_llama:
-            result = self._request_blocking(
-                self._llama_client, LlamaAction, 'prompt', request
-            ).response
-        elif client == 'whisper' and self.use_whisper:
-            result = self._request_blocking(
-                self._whisper_client, WhisperAction, 'file_name', request
-            ).text
-
-        return result
+    def stop_robot(self):
+        """Stop the robot (set all velocities to zero)."""
+        if self.use_teleop:
+            self.teleop.stop()
+            self.get_logger().info("Robot stopped")
+        else:
+            self.get_logger().warn("Teleop not enabled")
 
 
 def main(args=None):
+    """
+    Main entry point for the M6 Client.
+    
+    Remote monitoring and control interface for the robot.
+    
+    Features:
+    - Real-time YOLO detection monitoring
+    - Manual teleop control (optional)
+    
+    Commands:
+    - 'status': Show latest YOLO detection
+    - 'stop': Stop robot (if teleop enabled)
+    - 'forward': Move forward (if teleop enabled)
+    - 'backward': Move backward (if teleop enabled)
+    - 'left': Turn left (if teleop enabled)
+    - 'right': Turn right (if teleop enabled)
+    - 'faster': Increase speed (if teleop enabled)
+    - 'slower': Decrease speed (if teleop enabled)
+    - 'quit' or Ctrl+D: Exit
+    """
     rclpy.init(args=args)
 
-    print("Initializing ML5 Client Node...")
-    client = ML5Client()
-    print("ML5 Client Node Initialized.")
+    print("\n" + "="*60)
+    print("   Milestone 6 Client - Remote Robot Monitor & Control")
+    print("="*60)
+    print("\nInitializing M6 Client Node...")
+    print("Note: Set use_teleop=True in code to enable manual control")
+    
+    # Initialize client - change use_teleop=True to enable manual control
+    client = M6Client(use_yolo=True, use_teleop=False)
+    
+    print("M6 Client Node Initialized.\n")
+    print("Available commands:")
+    print("  'status'   - Show latest YOLO detection")
+    if client.use_teleop:
+        print("  'forward'  - Move robot forward")
+        print("  'backward' - Move robot backward")
+        print("  'left'     - Turn left")
+        print("  'right'    - Turn right")
+        print("  'faster'   - Increase speed")
+        print("  'slower'   - Decrease speed")
+        print("  'stop'     - Stop all movement")
+    print("  'quit'     - Exit client")
+    print("="*60 + "\n")
 
-    file_name = "voice_input.wav"
-    while True:
-        final_input = ""
-
-        print("Prompt (or type 's' to detect voice): ")
-        user_input = get_user_input()
-        if user_input is None:
-            break
-
-        if user_input != "s":
-            while user_input != "END":
-                final_input += user_input + "\n"
-                user_input = get_user_input()
-        else:
-            final_input = user_input
-
-        if final_input == "s":
-            # Record audio from microphone
-            client("espeak", "speak in voice now")
-            record_audio_and_saveas(file_name)
-            # Transcribe audio file with whisper
-            final_input = client("whisper", file_name)
-
-        if client.use_llama:
-            prompt_assistant(client, final_input)
-        else:
-            client("espeak", "Robot speaking.")
-            client("espeak", final_input)
-
-    client.destroy_node()
-    rclpy.shutdown()
+    # Speed control for teleop
+    linear_speed = 0.15
+    angular_speed = 0.5
+    speed_increment = 0.05
+    
+    try:
+        while True:
+            print("Command: ", end='', flush=True)
+            user_input = get_user_input()
+            
+            if user_input is None or user_input.lower() == 'quit':
+                print("\nExiting...")
+                break
+            
+            command = user_input.lower().strip()
+            
+            # Handle status command
+            if command == 'status':
+                detection = client.get_latest_detection()
+                if detection:
+                    print(f"\n[DETECTION] Class: {detection.clz}")
+                    print(f"  Position: ({detection.bbox_x:.1f}, {detection.bbox_y:.1f})")
+                    print(f"  Size: {detection.bbox_w:.1f} x {detection.bbox_h:.1f} pixels\n")
+                else:
+                    print("\n[NO DETECTION] Waiting for detections from server...\n")
+                continue
+            
+            # Handle teleop commands
+            if client.use_teleop:
+                if command == 'stop':
+                    client.stop_robot()
+                    print(f"[TELEOP] Robot stopped\n")
+                    
+                elif command == 'forward':
+                    client.manual_control(linear_x=linear_speed, angular_z=0.0)
+                    print(f"[TELEOP] Moving forward at {linear_speed:.2f} m/s\n")
+                    
+                elif command == 'backward':
+                    client.manual_control(linear_x=-linear_speed, angular_z=0.0)
+                    print(f"[TELEOP] Moving backward at {linear_speed:.2f} m/s\n")
+                    
+                elif command == 'left':
+                    client.manual_control(linear_x=0.0, angular_z=angular_speed)
+                    print(f"[TELEOP] Turning left at {angular_speed:.2f} rad/s\n")
+                    
+                elif command == 'right':
+                    client.manual_control(linear_x=0.0, angular_z=-angular_speed)
+                    print(f"[TELEOP] Turning right at {angular_speed:.2f} rad/s\n")
+                    
+                elif command == 'faster':
+                    linear_speed = min(linear_speed + speed_increment, 0.5)
+                    angular_speed = min(angular_speed + speed_increment, 2.0)
+                    print(f"[TELEOP] Speed increased: linear={linear_speed:.2f}, angular={angular_speed:.2f}\n")
+                    
+                elif command == 'slower':
+                    linear_speed = max(linear_speed - speed_increment, 0.05)
+                    angular_speed = max(angular_speed - speed_increment, 0.1)
+                    print(f"[TELEOP] Speed decreased: linear={linear_speed:.2f}, angular={angular_speed:.2f}\n")
+                    
+                elif command:
+                    print(f"[ERROR] Unknown command: '{command}'\n")
+            else:
+                if command in ['stop', 'forward', 'backward', 'left', 'right', 'faster', 'slower']:
+                    print("[ERROR] Teleop not enabled. Reinitialize with use_teleop=True\n")
+                elif command:
+                    print(f"[ERROR] Unknown command: '{command}'\n")
+                    
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user...")
+    finally:
+        print("\nShutting down client...")
+        if client.use_teleop:
+            client.stop_robot()
+        client.destroy_node()
+        rclpy.shutdown()
+        print("Client shutdown complete.\n")
 
 
 if __name__ == '__main__':
