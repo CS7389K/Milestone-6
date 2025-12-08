@@ -212,10 +212,16 @@ class TeleopArm(Node):
             joint4_target = 1.0
         
         # Adjust joint2 based on vertical position
-        # If joint2 negative = arm raised, positive = arm lowered (typical convention)
-        # Positive offset_y (object lower in image) -> need to lower arm -> subtract to make more negative
-        # Negative offset_y (object higher in image) -> need to raise arm -> add to make less negative
-        joint2_target -= offset_y * 0.2
+        # Convention: more negative joint2 = arm down, less negative = arm up
+        # Positive offset_y (object lower in image) -> subtract to make more negative (arm down)
+        # Negative offset_y (object higher in image) -> add (less subtraction) to make less negative (arm up)
+        joint2_adjustment = -offset_y * 0.2
+        joint2_target += joint2_adjustment
+        
+        self.get_logger().debug(
+            f"Arm calc: offset_y={offset_y:.2f}, adjustment={joint2_adjustment:.3f}, "
+            f"joint2={joint2_target:.3f}"
+        )
         
         return {
             'joint1': joint1_target,
