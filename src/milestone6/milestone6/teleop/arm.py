@@ -371,11 +371,8 @@ class TeleopArm(Node):
             self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
             
             # Check if we have a detection
-            if self.object_detected and self.last_detection_time is not None:
-                age = (self.get_clock().now() - self.last_detection_time).nanoseconds / 1e9
-                if age <= self.detection_timeout:
-                    self.get_logger().info("Object detected! Preparing to grab...")
-                    self.set_state(ArmMissionState.PREPARING)
+            self.get_logger().info("Object detected! Preparing to grab...")
+            self.set_state(ArmMissionState.PREPARING)
             return
 
         # ------------------- STATE: PREPARING -------------------
