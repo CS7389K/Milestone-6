@@ -243,7 +243,7 @@ class TeleopPublisherNode(Node):
         self.get_logger().info("Starting TeleopPublisher Node...")
         
         # Initialize the publisher (using self as the node)
-        self.publisher = TeleopPublisher(self, teleop_subscriber=None)
+        self.publisher = TeleopPublisher(self)
         
         self.get_logger().info("TeleopPublisher Node ready.")
     
