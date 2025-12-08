@@ -339,13 +339,13 @@ class TeleopArm(Node):
                 self.teleop_pub.send_arm_trajectory(arm_positions)
                 time.sleep(2.0)
                 
-                # Extend to grasp - reach down and forward more aggressively
+                # Extend to grasp - reach forward by tilting shoulder UP (less negative)
                 self.get_logger().info("Approaching for grasp...")
                 grasp_positions = {
                     'joint1': arm_positions['joint1'],
-                    'joint2': max(-1.57, arm_positions['joint2'] - 0.15),  # Reach down more, but stay safe
-                    'joint3': min(1.5, arm_positions['joint3'] + 0.2),     # Extend forward more
-                    'joint4': arm_positions['joint4'] + 0.2                # Adjust wrist to compensate
+                    'joint2': min(-0.8, arm_positions['joint2'] + 0.2),   # Tilt forward (LESS negative = forward)
+                    'joint3': min(1.5, arm_positions['joint3'] + 0.15),   # Extend forward more
+                    'joint4': arm_positions['joint4'] - 0.3                # Adjust wrist to compensate
                 }
                 self.teleop_pub.send_arm_trajectory(grasp_positions)
                 time.sleep(2.0)
