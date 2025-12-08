@@ -100,23 +100,23 @@ class TeleopArm(Node):
         self.teleop_sub = TeleopSubscriber(self)
         self.teleop_pub = TeleopPublisher(self, self.teleop_sub)
 
-        # ------------------- Detection tracking -------------------
+        # ------------------- Timer -------------------
+        self.timer = self.create_timer(0.1, self.tick)  # 10 Hz
+
+        # Detection tracking
         self.last_detection_time = None
         self.last_yolo_data = None
         self.object_detected = False
 
-        # ------------------- State machine -------------------
+        # State machine
         self.state = ArmMissionState.WAITING
         self.state_entered = True
 
-        # ------------------- Threading -------------------
+        # Threading
         self.arm_action_complete = False
         self.arm_action_failed = False
         self.arm_thread = None
         self.hold_start_time = None
-
-        # ------------------- Timer -------------------
-        self.timer = self.create_timer(0.1, self.tick)  # 10 Hz
 
         class_name = COCO_CLASSES.get(self.target_class, 'unknown')
         self.get_logger().info("Part2Mission ready: Coordinated base+arm control")
@@ -129,6 +129,8 @@ class TeleopArm(Node):
     # ------------------------------------------------------------------
     def _yolo_callback(self, data: YOLOData):
         """Process YOLO detections from YOLOSubscriber."""
+        self.get_logger().info(f"Received YOLO detection callback {str(data)}")
+
         # Filter by target class
         if data.clz != self.target_class:
             return
@@ -148,6 +150,7 @@ class TeleopArm(Node):
     # ------------------------------------------------------------------
     def set_state(self, new_state: ArmMissionState):
         """Transition to a new state."""
+        self.get_logger().info(f"Requesting state transition to {new_state.name}")
         if new_state != self.state:
             self.get_logger().info(f"State transition: {self.state.name} -> {new_state.name}")
             self.state = new_state
@@ -156,6 +159,7 @@ class TeleopArm(Node):
 
     def is_detection_fresh(self):
         """Check if we've seen an object recently."""
+        self.get_logger().info("Checking if detection is fresh")
         if not self.object_detected or self.last_detection_time is None:
             return False
         
@@ -535,9 +539,9 @@ def main():
     rclpy.init()
     node = TeleopArm()
     try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
+        while rclpy.ok():
+            node.step()
+            rclpy.spin_once(node, timeout_sec=0.1)
     finally:
         node.destroy_node()
         rclpy.shutdown()
