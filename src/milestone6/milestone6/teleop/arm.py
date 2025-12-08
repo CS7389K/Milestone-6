@@ -35,7 +35,6 @@ Parameters:
 Example:
     ros2 run milestone6 part2_mission --ros-args -p target_class:=39
 """
-import threading
 import time
 from enum import Enum
 
@@ -48,7 +47,6 @@ from milestone6.yolo.yolo_data import YOLOData
 
 # Arm control via teleop publisher
 from milestone6.teleop.publisher import TeleopPublisher
-from milestone6.teleop.subscriber import TeleopSubscriber
 from milestone6.coco import COCO_CLASSES
 
 
@@ -110,10 +108,7 @@ class TeleopArm(Node):
         # State machine
         self.state = ArmMissionState.WAITING
 
-        # Threading
-        self.arm_action_complete = False
-        self.arm_action_failed = False
-        self.arm_thread = None
+        # Timing
         self.hold_start_time = None
 
         class_name = COCO_CLASSES.get(self.target_class, 'unknown')
@@ -144,9 +139,6 @@ class TeleopArm(Node):
         )
 
 
-    # ------------------------------------------------------------------
-    # State machine helpers
-    # ------------------------------------------------------------------
     def set_state(self, new_state: ArmMissionState):
         """Transition to a new state."""
         if new_state != self.state:
@@ -221,198 +213,112 @@ class TeleopArm(Node):
             'joint4': joint4_target
         }
 
-    # ------------------------------------------------------------------
-    # Arm action threads
-    # ------------------------------------------------------------------
-    def _prepare_arm_thread(self):
-        """Open gripper and position arm based on object detection."""
-        # try:
-        self.get_logger().info("Preparing arm for grab sequence...")
-        
-        if self.last_yolo_data is None:
-            self.get_logger().error("No detection data available!")
-            self.arm_action_complete = True
-            self.arm_action_failed = True
-            return
-        
-        # Open gripper first
-        self.get_logger().info("Opening gripper...")
-        self.teleop_pub.gripper_open()
-        time.sleep(1.5)
-        
-        # Calculate arm position based on detected object
-        self.get_logger().info("Moving arm to track detected object...")
-        target_positions = self.calculate_arm_position_from_object(self.last_yolo_data)
-        self.get_logger().info(f"Target positions: {target_positions}")
-        self.teleop_pub.send_arm_trajectory(target_positions)
-        time.sleep(2.0)
-        
-        self.arm_action_complete = True
-        self.arm_action_failed = False
-        self.get_logger().info("Arm preparation complete!")
-        # except Exception as e:
-        #     self.get_logger().error(f"Arm preparation failed: {e}")
-        #     self.arm_action_complete = True
-        #     self.arm_action_failed = True
 
-
-    def _grab_thread(self):
-        """Execute grab sequence based on detected object position."""
-        try:
-            self.get_logger().info("Starting GRAB sequence...")
-            
-            if self.last_yolo_data is None:
-                self.get_logger().error("No detection data available for grab!")
-                self.arm_action_complete = True
-                self.arm_action_failed = True
-                return
-            
-            # Calculate dynamic positions based on object
-            arm_positions = self.calculate_arm_position_from_object(self.last_yolo_data)
-            bbox_ratio = self.last_yolo_data.bbox_w / self.image_width
-            
-            # Step 1: Position arm towards object (already done in prepare, but recalculate for accuracy)
-            self.get_logger().info("Positioning arm towards object...")
-            self.teleop_pub.send_arm_trajectory(arm_positions)
-            time.sleep(2.0)
-            
-            # Step 2: Extend further to approach for grasp (adjust joint2 down, joint3/4 forward)
-            self.get_logger().info("Approaching for grasp...")
-            grasp_positions = {
-                'joint1': arm_positions['joint1'],  # Keep horizontal rotation
-                'joint2': arm_positions['joint2'] - 0.2,  # Reach down more
-                'joint3': arm_positions['joint3'] + 0.2,  # Extend forward
-                'joint4': arm_positions['joint4'] + 0.1   # Fine adjustment
-            }
-            self.teleop_pub.send_arm_trajectory(grasp_positions)
-            time.sleep(2.0)
-            
-            # Step 3: Close gripper
-            self.get_logger().info("Closing gripper...")
-            self.teleop_pub.gripper_close()
-            time.sleep(2.0)
-            
-            # Step 4: Lift
-            self.get_logger().info("Lifting object...")
-            lift_positions = {
-                'joint1': arm_positions['joint1'],  # Keep horizontal rotation
-                'joint2': -0.4,  # Lift up
-                'joint3': 0.2,
-                'joint4': 0.8
-            }
-            self.teleop_pub.send_arm_trajectory(lift_positions)
-            time.sleep(2.0)
-            
-            self.arm_action_complete = True
-            self.arm_action_failed = False
-            self.get_logger().info("GRAB sequence completed successfully!")
-        except Exception as e:
-            self.get_logger().error(f"Grab failed: {e}")
-            self.arm_action_complete = True
-            self.arm_action_failed = True
-
-
-    def _release_thread(self):
-        """Execute release sequence."""
-        try:
-            self.get_logger().info("Starting RELEASE sequence...")
-            
-            # Step 1: Lower slightly
-            self.get_logger().info("Lowering arm...")
-            self.teleop_pub.send_arm_trajectory({
-                'joint1': 0.0,
-                'joint2': -0.7,
-                'joint3': 0.4,
-                'joint4': 0.9
-            })
-            time.sleep(2.0)
-            
-            # Step 2: Open gripper
-            self.get_logger().info("Opening gripper...")
-            self.teleop_pub.gripper_open()
-            time.sleep(2.0)
-            
-            # Step 3: Retract
-            self.get_logger().info("Retracting arm...")
-            self.teleop_pub.send_arm_trajectory({
-                'joint1': 0.0,
-                'joint2': -0.3,
-                'joint3': 0.1,
-                'joint4': 0.6
-            })
-            time.sleep(2.0)
-            
-            self.arm_action_complete = True
-            self.arm_action_failed = False
-            self.get_logger().info("RELEASE sequence completed successfully!")
-        except Exception as e:
-            self.get_logger().error(f"Release failed: {e}")
-            self.arm_action_complete = True
-            self.arm_action_failed = True
-
-
-    def start_arm_action(self, thread_func):
-        """Start an arm action in a separate thread."""
-        self.arm_action_complete = False
-        self.arm_action_failed = False
-        self.arm_thread = threading.Thread(target=thread_func, daemon=True)
-        self.arm_thread.start()
-
-
-    # ------------------------------------------------------------------
-    # Main tick (state machine)
-    # ------------------------------------------------------------------
     def tick(self):
         """Main state machine tick."""
         
         # ------------------- STATE: WAITING -------------------
         if self.state == ArmMissionState.WAITING:
-            # Stop any movement
-            self.get_logger().info("Object detected! Preparing to grab...")
-            self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0) # Ensure base is stopped
-            self.set_state(ArmMissionState.PREPARING)
+            # Check if we have a fresh detection
+            if self.object_detected and self.last_yolo_data is not None:
+                # Check if detection is recent (within timeout)
+                if self.last_detection_time:
+                    elapsed = (self.get_clock().now() - self.last_detection_time).nanoseconds / 1e9
+                    if elapsed < self.detection_timeout:
+                        self.get_logger().info(f"Object detected (class {self.last_yolo_data.clz})! Preparing to grab...")
+                        self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
+                        self.set_state(ArmMissionState.PREPARING)
+                    else:
+                        self.get_logger().debug(f"Detection too old ({elapsed:.1f}s), waiting...")
             return
 
         # ------------------- STATE: PREPARING -------------------
-        if self.state == ArmMissionState.PREPARING:
-            # Start preparation if not already running
-            if not self.arm_thread or not self.arm_thread.is_alive():
-                if not self.arm_action_complete:
-                    self.get_logger().info("PREPARING STATE: Starting arm preparation thread...")
-                    self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0) # Ensure base is stopped
-                    self.start_arm_action(self._prepare_arm_thread)
-            
-            # Wait for preparation to complete
-            if self.arm_action_complete:
-                if self.arm_action_failed:
-                    self.get_logger().error("Arm preparation failed, returning to WAITING")
-                    self.object_detected = False
+        elif self.state == ArmMissionState.PREPARING:
+            try:
+                self.get_logger().info("PREPARING STATE: Opening gripper and positioning arm...")
+                self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
+                
+                if self.last_yolo_data is None:
+                    self.get_logger().error("No YOLO data available, returning to WAITING")
                     self.set_state(ArmMissionState.WAITING)
-                else:
-                    self.get_logger().info("Preparation complete! Starting grab...")
-                    self.set_state(ArmMissionState.GRABBING)
+                    return
+                
+                # Open gripper
+                self.get_logger().info("Opening gripper...")
+                self.teleop_pub.gripper_open()
+                time.sleep(1.5)
+                
+                # Calculate and move to target position
+                self.get_logger().info("Moving arm to track detected object...")
+                target_positions = self.calculate_arm_position_from_object(self.last_yolo_data)
+                self.get_logger().info(f"Target positions: {target_positions}")
+                self.teleop_pub.send_arm_trajectory(target_positions)
+                time.sleep(2.0)
+                
+                self.get_logger().info("Preparation complete! Starting grab...")
+                self.set_state(ArmMissionState.GRABBING)
+            except Exception as e:  # noqa: B902
+                self.get_logger().error(f"Preparation failed: {e}")
+                self.object_detected = False
+                self.set_state(ArmMissionState.WAITING)
             return
 
         # ------------------- STATE: GRABBING -------------------
-        if self.state == ArmMissionState.GRABBING:
-            # Start grab if not already running
-            if not self.arm_thread or not self.arm_thread.is_alive():
-                if not self.arm_action_complete:
-                    self.start_arm_action(self._grab_thread)
-            
-            # Wait for grab to complete
-            if self.arm_action_complete:
-                if self.arm_action_failed:
-                    self.get_logger().error("Grab failed, returning to WAITING")
+        elif self.state == ArmMissionState.GRABBING:
+            try:
+                self.get_logger().info("GRABBING STATE: Executing grab sequence...")
+                
+                if self.last_yolo_data is None:
+                    self.get_logger().error("No YOLO data available, returning to WAITING")
                     self.object_detected = False
                     self.set_state(ArmMissionState.WAITING)
-                else:
-                    self.get_logger().info("Grab successful! Holding object...")
-                    self.set_state(ArmMissionState.HOLDING)
+                    return
+                
+                # Recalculate positions for accuracy
+                arm_positions = self.calculate_arm_position_from_object(self.last_yolo_data)
+                
+                # Position arm towards object
+                self.get_logger().info("Positioning arm towards object...")
+                self.teleop_pub.send_arm_trajectory(arm_positions)
+                time.sleep(2.0)
+                
+                # Extend to grasp
+                self.get_logger().info("Approaching for grasp...")
+                grasp_positions = {
+                    'joint1': arm_positions['joint1'],
+                    'joint2': arm_positions['joint2'] - 0.2,
+                    'joint3': arm_positions['joint3'] + 0.2,
+                    'joint4': arm_positions['joint4'] + 0.1
+                }
+                self.teleop_pub.send_arm_trajectory(grasp_positions)
+                time.sleep(2.0)
+                
+                # Close gripper
+                self.get_logger().info("Closing gripper...")
+                self.teleop_pub.gripper_close()
+                time.sleep(2.0)
+                
+                # Lift object
+                self.get_logger().info("Lifting object...")
+                lift_positions = {
+                    'joint1': arm_positions['joint1'],
+                    'joint2': -0.4,
+                    'joint3': 0.2,
+                    'joint4': 0.8
+                }
+                self.teleop_pub.send_arm_trajectory(lift_positions)
+                time.sleep(2.0)
+                
+                self.get_logger().info("Grab successful! Holding object...")
+                self.set_state(ArmMissionState.HOLDING)
+            except Exception as e:  # noqa: B902
+                self.get_logger().error(f"Grab failed: {e}")
+                self.object_detected = False
+                self.set_state(ArmMissionState.WAITING)
             return
 
         # ------------------- STATE: HOLDING -------------------
-        if self.state == ArmMissionState.HOLDING:
+        elif self.state == ArmMissionState.HOLDING:
             # Start holding timer if not set
             if self.hold_start_time is None:
                 self.get_logger().info("Holding object for 2 seconds...")
@@ -427,26 +333,48 @@ class TeleopArm(Node):
             return
 
         # ------------------- STATE: RELEASING -------------------
-        if self.state == ArmMissionState.RELEASING:
-            # Start release if not already running
-            if not self.arm_thread or not self.arm_thread.is_alive():
-                if not self.arm_action_complete:
-                    self.start_arm_action(self._release_thread)
-            
-            # Wait for release to complete
-            if self.arm_action_complete:
-                if self.arm_action_failed:
-                    self.get_logger().error("Release failed, but continuing to DONE")
-                else:
-                    self.get_logger().info("Release successful!")
+        elif self.state == ArmMissionState.RELEASING:
+            try:
+                self.get_logger().info("RELEASING STATE: Executing release sequence...")
+                
+                # Lower arm slightly
+                self.get_logger().info("Lowering arm...")
+                self.teleop_pub.send_arm_trajectory({
+                    'joint1': 0.0,
+                    'joint2': -0.7,
+                    'joint3': 0.4,
+                    'joint4': 0.9
+                })
+                time.sleep(2.0)
+                
+                # Open gripper
+                self.get_logger().info("Opening gripper...")
+                self.teleop_pub.gripper_open()
+                time.sleep(2.0)
+                
+                # Retract arm
+                self.get_logger().info("Retracting arm...")
+                self.teleop_pub.send_arm_trajectory({
+                    'joint1': 0.0,
+                    'joint2': -0.3,
+                    'joint3': 0.1,
+                    'joint4': 0.6
+                })
+                time.sleep(2.0)
+                
+                self.get_logger().info("Release successful!")
+                self.set_state(ArmMissionState.DONE)
+            except Exception as e:  # noqa: B902
+                self.get_logger().error(f"Release failed: {e}, but continuing to DONE")
                 self.set_state(ArmMissionState.DONE)
             return
 
         # ------------------- STATE: DONE -------------------
-        if self.state == ArmMissionState.DONE:
+        elif self.state == ArmMissionState.DONE:
             self.get_logger().info("Mission complete! Resetting to WAITING...")
             self.object_detected = False
-            time.sleep(1.0)
+            self.last_yolo_data = None
+            self.last_detection_time = None
             self.set_state(ArmMissionState.WAITING)
             return
 
