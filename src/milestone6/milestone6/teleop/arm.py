@@ -280,20 +280,6 @@ class TeleopArm(Node):
         try:
             self.get_logger().info("Preparing arm for grab sequence...")
             
-            # Wait for joint states to be available
-            timeout = 5.0
-            start = time.time()
-            self.get_logger().info(f"Waiting for joint states... (have_joint_states={self.teleop_sub.have_joint_states})")
-            while not self.teleop_sub.have_joint_states:
-                elapsed = time.time() - start
-                if elapsed > timeout:
-                    raise RuntimeError(f"Timeout waiting for joint states after {elapsed:.1f}s")
-                if elapsed % 1.0 < 0.1:  # Log every second
-                    self.get_logger().warn(f"Still waiting for joint states... ({elapsed:.1f}s)")
-                time.sleep(0.1)
-            
-            self.get_logger().info("Joint states available! Proceeding with arm preparation...")
-            
             # Open gripper first
             self.get_logger().info("Opening gripper...")
             self.teleop_pub.gripper_open()
