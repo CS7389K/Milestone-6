@@ -540,7 +540,7 @@ def main():
     node = TeleopArm()
     try:
         while rclpy.ok():
-            node.step()
+            node.tick()
             rclpy.spin_once(node, timeout_sec=0.1)
     finally:
         node.destroy_node()
