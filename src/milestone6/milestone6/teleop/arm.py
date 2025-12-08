@@ -92,9 +92,11 @@ class TeleopArm(Node):
         self.center_tolerance = int(self.get_parameter('center_tolerance').value)
 
         # ------------------- YOLO Subscriber -------------------
+        self.get_logger().info("Starting YOLO Subscriber...")
         self.yolo_subscriber = YOLOSubscriber(self, self._yolo_callback)
 
         # ------------------- Teleop control -------------------
+        self.get_logger().info("Starting Teleop Subscriber and Publisher...")
         self.teleop_sub = TeleopSubscriber(self)
         self.teleop_pub = TeleopPublisher(self, self.teleop_sub)
 
@@ -210,9 +212,10 @@ class TeleopArm(Node):
             joint4_target = 1.0
         
         # Adjust joint2 based on vertical position
-        # Positive offset_y (object lower in image) -> more negative joint2 (arm down)
-        # Negative offset_y (object higher in image) -> less negative joint2 (arm up)
-        joint2_target += offset_y * 0.2
+        # If joint2 negative = arm raised, positive = arm lowered (typical convention)
+        # Positive offset_y (object lower in image) -> need to lower arm -> subtract to make more negative
+        # Negative offset_y (object higher in image) -> need to raise arm -> add to make less negative
+        joint2_target -= offset_y * 0.2
         
         return {
             'joint1': joint1_target,
@@ -262,9 +265,9 @@ class TeleopArm(Node):
     # Arm action threads
     # ------------------------------------------------------------------
     def _prepare_arm_thread(self):
-        """Move arm to pre-grab position."""
+        """Open gripper and move arm to ready position."""
         try:
-            self.get_logger().info("Moving arm to pre-grab position...")
+            self.get_logger().info("Preparing arm for grab sequence...")
             
             # Wait for joint states to be available
             timeout = 5.0
@@ -279,8 +282,8 @@ class TeleopArm(Node):
             self.teleop_pub.gripper_open()
             time.sleep(1.5)
             
-            # Move arm to pre-grab position
-            self.get_logger().info("Moving to pre-grab position...")
+            # Move arm to ready position
+            self.get_logger().info("Moving arm to ready position...")
             target_positions = {
                 'joint1': 0.0,
                 'joint2': -0.3,
