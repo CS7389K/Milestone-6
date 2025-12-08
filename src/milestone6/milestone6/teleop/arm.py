@@ -172,111 +172,41 @@ class TeleopArm(Node):
 
     def calculate_arm_position_from_object(self, yolo_data: YOLOData):
         """
-        Calculate arm joint positions using inverse kinematics for OpenMANIPULATOR-X.
+        Calculate arm joint positions using FIXED POSES (like ROBOTIS does).
         
-        OpenMANIPULATOR-X Frame Conventions (from ROBOTIS specs):
-            - Link lengths: L1=0.077m, L2=0.130m, L3=0.124m, L4=0.126m (reach: 0.38m)
-            - joint1: Base rotation (yaw), CW+ around Z-axis
-            - joint2: Shoulder pitch, DOWN+ (negative = reach up, positive = reach down)
-            - joint3: Elbow pitch, BEND+ (positive = bend elbow)
-            - joint4: Wrist pitch, DOWN+ (positive = point down)
-            - Home pose reference: [0.0, -1.05, 0.35, 0.70] (reaching forward/up)
+        WHY THIS APPROACH WORKS:
+        - ROBOTIS uses MoveIt with pre-calibrated named targets ("home", "target")
+        - They do NOT calculate IK from pixels at runtime
+        - YOLO bounding boxes have NO depth information
+        - Camera calibration is imperfect and drifts over time
+        - Fixed poses can be tuned once and work reliably
         
-        Camera Frame:
-            - Mounted on TurtleBot3 facing forward
-            - Camera ~0.2m above base, looking slightly down
+        We use simple pan (joint1) from pixel position + fixed reach pose.
         """
         # Calculate object center in image coordinates
         obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
-        obj_center_y = yolo_data.bbox_y + (yolo_data.bbox_h / 2.0)
         
-        # Normalize to [-1, 1] range
+        # Normalize horizontal position to [-1, 1]
         norm_x = (obj_center_x - (self.image_width / 2.0)) / (self.image_width / 2.0)
-        norm_y = (obj_center_y - (self.image_height / 2.0)) / (self.image_height / 2.0)
         
-        # ==================== ESTIMATE TARGET 3D POSITION ====================
-        # Estimate distance from bbox size (larger bbox = closer object)
-        bbox_width_ratio = max(yolo_data.bbox_w / self.image_width, 0.1)
-        estimated_distance = 0.45 - (bbox_width_ratio * 0.6)  # 0.45m to 0.21m range
-        estimated_distance = max(0.21, min(0.35, estimated_distance))
-        
-        # Camera FOV: ~62° horizontal (Raspberry Pi Camera Module v2)
-        horizontal_angle = norm_x * math.radians(31)  # ±31 degrees
-        vertical_angle = -norm_y * math.radians(24)  # ±24 degrees (inverted: up in image = up in world)
-        
-        # Target in camera frame
-        target_x_cam = estimated_distance * math.cos(vertical_angle) * math.cos(horizontal_angle)
-        target_y_cam = estimated_distance * math.cos(vertical_angle) * math.sin(horizontal_angle)
-        target_z_cam = estimated_distance * math.sin(vertical_angle)
-        
-        # Transform to base frame
-        # Camera is approximately 0.19m above base, mounted on top plate
-        camera_height = 0.19
-        camera_forward_offset = 0.04  # Slight forward offset
-        
-        target_x = target_x_cam + camera_forward_offset  # Forward (robot X)
-        target_y = target_y_cam                          # Left/Right (robot Y)
-        target_z = target_z_cam + camera_height          # Height (robot Z)
-        
-        # ==================== INVERSE KINEMATICS ====================
-        # Joint 1: Base rotation to point at target
-        joint1 = math.atan2(target_y, target_x)
+        # --- JOINT 1: Pan base to align with object ---
+        # Camera has ~62° horizontal FOV
+        camera_hfov_rad = math.radians(62.0)
+        joint1 = norm_x * (camera_hfov_rad / 2.0)  # Map pixel position to pan angle
         joint1 = max(-math.pi, min(math.pi, joint1))
         
-        # Distance in XY plane and height relative to shoulder (joint2)
-        r_xy = math.sqrt(target_x**2 + target_y**2)
-        r_z = target_z - self.L1
+        # --- FIXED REACHING POSE ---
+        # These are empirically tuned for bottles ~30-35cm in front
+        # Based on ROBOTIS home pose reference: [0.0, -1.05, 0.35, 0.70]
         
-        # 2D IK in vertical plane for joints 2, 3, 4
-        # Treat joint4 as part of end-effector length for 2-DOF IK
-        reach_2d = math.sqrt(r_xy**2 + r_z**2)
-        
-        # Check reachability
-        max_reach = self.L2 + self.L3 + self.L4
-        if reach_2d > max_reach * 0.98:
-            self.get_logger().warn(f"Target distance {reach_2d:.3f}m near max reach {max_reach:.3f}m")
-            reach_2d = max_reach * 0.95
-        
-        # Effective end-effector length (combine L3 and L4)
-        L_eff = self.L3 + self.L4
-        
-        # Law of cosines for joint3 (elbow angle)
-        cos_angle = (reach_2d**2 - self.L2**2 - L_eff**2) / (2 * self.L2 * L_eff)
-        cos_angle = max(-1.0, min(1.0, cos_angle))
-        elbow_angle = math.acos(cos_angle)
-        
-        # Joint3: positive = bend elbow
-        # OpenMANIPULATOR-X convention: positive joint3 bends elbow
-        joint3 = elbow_angle
-        
-        # Joint2: shoulder angle to reach target
-        # Angle to target in vertical plane
-        alpha = math.atan2(r_z, r_xy)
-        # Compensation angle from law of sines
-        sin_beta = (L_eff * math.sin(elbow_angle)) / reach_2d if reach_2d > 0.001 else 0
-        sin_beta = max(-1.0, min(1.0, sin_beta))
-        beta = math.asin(sin_beta)
-        
-        # Joint2: NEGATIVE angles reach forward/up, POSITIVE angles point down
-        # For bottle in front at table height, we need NEGATIVE joint2
-        joint2 = -(alpha + beta)  # Negative to reach forward
-        
-        # Joint limits
-        joint2 = max(-1.5, min(1.5, joint2))
-        joint3 = max(0.0, min(1.5, joint3))  # Elbow: 0 = straight, positive = bent
-        
-        # Joint4: Wrist orientation to keep gripper pointing down toward bottle
-        # End-effector pitch = joint2 + joint3 + joint4
-        # We want gripper to point straight down: -pi/2 radians
-        desired_ee_pitch = -math.pi / 2
-        joint4 = desired_ee_pitch - (joint2 + joint3)
-        joint4 = max(-1.8, min(1.8, joint4))
+        joint2 = -1.0   # Shoulder: reach forward (negative = forward/up)
+        joint3 = 0.8    # Elbow: moderately bent
+        joint4 = 0.7    # Wrist: point gripper downward
         
         self.get_logger().info(
-            f"IK: target=({target_x:.3f}, {target_y:.3f}, {target_z:.3f}m), "
-            f"reach={reach_2d:.3f}m, "
-            f"joints=[{math.degrees(joint1):.1f}°, {math.degrees(joint2):.1f}°, "
-            f"{math.degrees(joint3):.1f}°, {math.degrees(joint4):.1f}°]"
+            f"Fixed Pose: j1={math.degrees(joint1):.1f}° (pan), "
+            f"j2={math.degrees(joint2):.1f}°, j3={math.degrees(joint3):.1f}°, j4={math.degrees(joint4):.1f}° "
+            f"(object at x={obj_center_x:.0f}px, norm={norm_x:.2f})"
         )
         
         return {
