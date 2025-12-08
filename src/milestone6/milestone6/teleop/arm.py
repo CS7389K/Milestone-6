@@ -191,7 +191,7 @@ class TeleopArm(Node):
             joint4_target = 1.0
         else:  # Close
             self.get_logger().info("Object close")
-            joint2_target = -0.8
+            joint2_target = -1.8
             joint3_target = 0.5
             joint4_target = 1.0
         
