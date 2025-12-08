@@ -19,25 +19,24 @@
 import rclpy
 from rclpy.node import Node
 
-from .teleop.publisher import TeleopPublisher
-
-from .yolo.subscriber import YOLOSubscriber
-from .yolo.yolo_data import YOLOData
-
-from .coco import COCO_CLASSES
+from milestone6.teleop.publisher import TeleopPublisher
+from milestone6.yolo.subscriber import YOLOSubscriber
+from milestone6.yolo.yolo_data import YOLOData
+from milestone6.coco import COCO_CLASSES
 
 
-class ML6Server(Node):
+class TeleopBase(Node):
     """
-    ML6 Server Node for autonomous robot control.
+    TeleopBase Node for autonomous base (wheel) control.
     
     Integrates YOLO object detection with teleoperation control
     to enable autonomous navigation towards detected objects.
+    Uses TeleopPublisher for continuous base movement commands.
     
     Message Types: https://docs.ros2.org/foxy/api/std_msgs/index-msg.html
     """
     def __init__(self):
-        super().__init__('m6_server')
+        super().__init__('teleop_base')
         self.declare_parameter('move_wheels', True)
 
         self.declare_parameter('image_width', 500)
@@ -59,7 +58,7 @@ class ML6Server(Node):
         self._track_class = self.get_parameter('track_class').value
         
         class_name = COCO_CLASSES.get(self._track_class, 'unknown')
-        self.get_logger().info("Initializing ML6 Server Node...")
+        self.get_logger().info("Initializing TeleopBase Node...")
         self.get_logger().info(f"Tracking COCO class: '{class_name}' (ID: {self._track_class})")
 
         # Initialize teleop publisher (handles all movement commands)
@@ -80,7 +79,7 @@ class ML6Server(Node):
         # Create timer to check for lost target
         self.check_timer = self.create_timer(0.1, self._check_target_lost)
 
-        self.get_logger().info("ML6 Server Node has been started.")
+        self.get_logger().info("TeleopBase Node has been started.")
     
     def _yolo_callback(self, data: YOLOData):
         """
@@ -155,7 +154,7 @@ class ML6Server(Node):
     
     def shutdown(self):
         """Clean shutdown of the server."""
-        self.get_logger().info("Shutting down ML6 Server...")
+        self.get_logger().info("Shutting down TeleopBase...")
         self.check_timer.cancel()
         if self._move_wheels:
             self.teleop.shutdown()
@@ -166,12 +165,12 @@ def main(args=None):
 
     server = None
     try:
-        server = ML6Server()
+        server = TeleopBase()
         rclpy.spin(server)
     except KeyboardInterrupt:
-        print("\nShutting down ML6 Server...")
+        print("\nShutting down TeleopBase...")
     except Exception as e:
-        print(f"Error in ML6 Server: {e}")
+        print(f"Error in TeleopBase: {e}")
     finally:
         if server:
             server.shutdown()

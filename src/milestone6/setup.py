@@ -11,6 +11,7 @@ setup(
         package_name,
         f'{package_name}.teleop',
         f'{package_name}.yolo',
+        f'{package_name}.api',
     ],
     data_files=[
         ('share/ament_index/resource_index/packages',
@@ -29,9 +30,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            f"server = {package_name}.server:main",
-            f"client = {package_name}.client:main",
+            f"base = {package_name}.teleop.base:main",
             f"arm = {package_name}.teleop.arm:main",
+            f"client = {package_name}.client:main",
             f"yolo_publisher = {package_name}.yolo.publisher:main",
         ],
     },

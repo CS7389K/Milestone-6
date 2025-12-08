@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Launch file for Milestone 6 Part 1: YOLO Publisher + TeleopBase
+Launch file for Milestone 6 Part 2: YOLO Publisher + TeleopBase + TeleopArm
 
 Launches:
 - YOLO Publisher Node: Captures camera frames and publishes object detections
 - TeleopBase Node: Subscribes to detections and controls robot base movement
+- TeleopArm Node: Automatically grabs detected objects
 
 Usage:
-    ros2 launch milestone6 part1.launch.py
+    ros2 launch milestone6 part2.launch.py
 
 Optional Parameters:
     yolo_model:=<path>     Path to YOLO model file (default: yolo11n.pt)
@@ -27,7 +28,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Generate launch description with YOLO publisher and TeleopBase nodes."""
+    """Generate launch description with YOLO publisher, TeleopBase, and TeleopArm nodes."""
     # YOLO Publisher Node
     yolo_publisher_node = Node(
         package='milestone6',
@@ -58,7 +59,20 @@ def generate_launch_description():
             'track_class': 39,  # bottle
         }]
     )
+    # TeleopArm Node
+    arm_node = Node(
+        package='milestone6',
+        executable='arm',
+        name='teleop_arm',
+        output='screen',
+        parameters=[{
+            'target_class': 39,  # bottle
+            'detection_timeout_sec': 1.0,
+            'grab_delay_sec': 0.5,
+        }]
+    )
     return LaunchDescription([
         yolo_publisher_node,
         base_node,
+        arm_node,
     ])

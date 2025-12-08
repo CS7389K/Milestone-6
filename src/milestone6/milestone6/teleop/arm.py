@@ -1,222 +1,341 @@
 #!/usr/bin/env python3
-import json
+"""
+TeleopArm - Dynamic Object Tracking and Grabbing Node
+
+This node uses YOLO object detection to dynamically control both the robot base
+and arm to approach and grab objects (specifically bottles, class ID 39).
+Arm movements are calculated based on object position in the camera frame.
+
+Architecture:
+    - YOLOSubscriber: Receives object detection data with position and size
+    - TeleopPublisher: Controls both base (wheels) and arm movements
+    - TeleopSubscriber: Monitors joint states for trajectory planning
+    - TeleopArm (this node): Orchestrates coordinated base and arm control
+
+States:
+    WAITING    -> Waiting for object detection
+    APPROACHING -> Moving base towards object while tracking with arm
+    PREPARING  -> Object in range, preparing arm for grab
+    GRABBING   -> Executing grab sequence
+    HOLDING    -> Holding the grabbed object for 2 seconds
+    RELEASING  -> Releasing the object
+    DONE       -> Mission complete, resets to WAITING
+
+Usage:
+    ros2 run milestone6 part2_mission
+
+Parameters:
+    - target_class: COCO class ID to grab (default: 39 for bottles)
+    - detection_timeout_sec: How long to wait for fresh detections (default: 1.0)
+    - image_width: Camera image width (default: 500)
+    - image_height: Camera image height (default: 320)
+    - approach_bbox_threshold: BBox width to stop approaching (default: 150)
+    - forward_speed: Base forward speed (default: 0.15)
+    - turn_speed: Base turn speed (default: 1.5)
+
+Example:
+    ros2 run milestone6 part2_mission --ros-args -p target_class:=39
+"""
 import threading
+import time
 from enum import Enum
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
-from geometry_msgs.msg import Twist
 
-# You created this in Step 3
-from milestone6.api.arm_sequences import ArmSequences
+# YOLO detection
+from milestone6.yolo.subscriber import YOLOSubscriber
+from milestone6.yolo.yolo_data import YOLOData
 
-
-class MissionState(Enum):
-    SEARCH_ALIGN = 1
-    APPROACH = 2
-    GRAB = 3
-    GRAB_IN_PROGRESS = 4  # New state to wait for grab to complete
-    MOVE_FORWARD_1M = 5
-    RELEASE = 6
-    RELEASE_IN_PROGRESS = 7  # New state to wait for release to complete
-    DONE = 8
+# Arm control via teleop publisher
+from milestone6.teleop.publisher import TeleopPublisher
+from milestone6.teleop.subscriber import TeleopSubscriber
+from milestone6.coco import COCO_CLASSES
 
 
-class Part2Mission(Node):
+class ArmMissionState(Enum):
+    """States for coordinated base and arm grabbing mission."""
+    WAITING = 1           # Waiting for object detection
+    APPROACHING = 2       # Moving base towards object, tracking with arm
+    PREPARING = 3         # Object in range, preparing arm for grab
+    GRABBING = 4          # Executing grab sequence
+    HOLDING = 5           # Object grabbed, holding
+    RELEASING = 6         # Releasing the object
+    DONE = 7             # Mission complete
+
+
+class TeleopArm(Node):
+    """
+    Coordinated base and arm control node for object grabbing.
+    Uses YOLO detection to approach and grab bottles dynamically.
+    """
     def __init__(self):
         super().__init__('part2_mission')
 
-        # ------------------- Parameters (safe defaults) -------------------
-        # YOLOPublisher default image width=500, height=320
+        # ------------------- Parameters -------------------
+        self.declare_parameter('target_class', 39)  # Default to bottle
+        self.declare_parameter('detection_timeout_sec', 1.0)
         self.declare_parameter('image_width', 500)
-        self.declare_parameter('align_tol_px', 20)
-        self.declare_parameter('ang_k', 0.002)
-        self.declare_parameter('approach_v', 0.05)
-        self.declare_parameter('close_bbox_w', 160)
-        self.declare_parameter('bottle_timeout_sec', 0.5)
-
-        self.declare_parameter('move_speed', 0.08)
-        self.declare_parameter('move_dist', 1.0)
-
-        # Optional class filter:
-        # set to -1 to accept any class
-        self.declare_parameter('target_class', -1)
-
-        self.image_width = float(self.get_parameter('image_width').value)
-        self.img_cx = self.image_width / 2.0
-
-        self.align_tol_px = float(self.get_parameter('align_tol_px').value)
-        self.ang_k = float(self.get_parameter('ang_k').value)
-        self.approach_v = float(self.get_parameter('approach_v').value)
-        self.close_bbox_w = float(self.get_parameter('close_bbox_w').value)
-        self.bottle_timeout_sec = float(self.get_parameter('bottle_timeout_sec').value)
-
-        self.move_speed = float(self.get_parameter('move_speed').value)
-        self.move_dist = float(self.get_parameter('move_dist').value)
-        self.move_time = self.move_dist / self.move_speed if self.move_speed > 0 else 0.0
-
+        self.declare_parameter('image_height', 320)
+        self.declare_parameter('approach_bbox_threshold', 150)  # Stop approaching when object is this wide
+        self.declare_parameter('forward_speed', 0.15)
+        self.declare_parameter('turn_speed', 1.5)
+        self.declare_parameter('center_tolerance', 50)  # Pixels tolerance for centering
+        
         self.target_class = int(self.get_parameter('target_class').value)
+        self.detection_timeout = float(self.get_parameter('detection_timeout_sec').value)
+        self.image_width = int(self.get_parameter('image_width').value)
+        self.image_height = int(self.get_parameter('image_height').value)
+        self.bbox_threshold = int(self.get_parameter('approach_bbox_threshold').value)
+        self.forward_speed = float(self.get_parameter('forward_speed').value)
+        self.turn_speed = float(self.get_parameter('turn_speed').value)
+        self.center_tolerance = int(self.get_parameter('center_tolerance').value)
 
-        # ------------------- Publishers/Subscribers -------------------
-        self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        # ------------------- YOLO Subscriber -------------------
+        self.yolo_subscriber = YOLOSubscriber(self, self._yolo_callback)
 
-        # Your YOLO publisher:
-        # self._publisher = node.create_publisher(String, 'yolo_topic', 10)
-        self.yolo_sub = self.create_subscription(
-            String, 'yolo_topic', self.on_yolo, 10
-        )
+        # ------------------- Teleop control -------------------
+        self.teleop_sub = TeleopSubscriber(self)
+        self.teleop_pub = TeleopPublisher(self, self.teleop_sub)
 
-        # ------------------- Arm sequences -------------------
-        self.arm = ArmSequences(self)
-
-        # ------------------- Detection cache -------------------
-        # YOLO publisher sends one detection per message.
-        # We'll keep the best (widest) box within recent time window.
-        self.best_bbox = None  # dict
-        self.last_seen_time = None
+        # ------------------- Detection tracking -------------------
+        self.last_detection_time = None
+        self.last_yolo_data = None
+        self.object_detected = False
 
         # ------------------- State machine -------------------
-        self.state = MissionState.SEARCH_ALIGN
+        self.state = ArmMissionState.WAITING
         self.state_entered = True
 
-        # MOVE state bookkeeping (non-blocking)
-        self.move_start_time = None
-
-        # ------------------- Threading flags -------------------
+        # ------------------- Threading -------------------
         self.arm_action_complete = False
         self.arm_action_failed = False
         self.arm_thread = None
+        self.hold_start_time = None
 
-        # Timer tick
-        self.timer = self.create_timer(0.05, self.tick)  # 20 Hz
+        # ------------------- Timer -------------------
+        self.timer = self.create_timer(0.1, self.tick)  # 10 Hz
 
-        self.get_logger().info("Part2Mission ready: ALIGN->APPROACH->GRAB->MOVE_1M->RELEASE")
+        class_name = COCO_CLASSES.get(self.target_class, 'unknown')
+        self.get_logger().info("Part2Mission ready: Coordinated base+arm control")
+        self.get_logger().info(f"Tracking COCO class: '{class_name}' (ID: {self.target_class})")
+        self.get_logger().info("Waiting for object detection...")
 
 
     # ------------------------------------------------------------------
     # YOLO callback
     # ------------------------------------------------------------------
-    def on_yolo(self, msg: String):
-        try:
-            d = json.loads(msg.data)
-        except Exception:
+    def _yolo_callback(self, data: YOLOData):
+        """Process YOLO detections from YOLOSubscriber."""
+        # Filter by target class
+        if data.clz != self.target_class:
             return
 
-        # Required fields from your publisher
-        if not all(k in d for k in ('bbox_x', 'bbox_y', 'bbox_w', 'bbox_h', 'clz')):
-            return
-
-        # Optional class filtering
-        clz = int(d['clz'])
-        if self.target_class != -1 and clz != self.target_class:
-            return
-
-        # Keep the largest bbox_w as current target
-        if self.best_bbox is None or float(d['bbox_w']) > float(self.best_bbox['bbox_w']):
-            self.best_bbox = d
-            self.last_seen_time = self.get_clock().now()
+        # Object detected!
+        self.object_detected = True
+        self.last_detection_time = self.get_clock().now()
+        self.last_yolo_data = data
+        self.get_logger().debug(
+            f"Bottle detected: class {data.clz}, "
+            f"bbox=({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}x{data.bbox_h:.1f})"
+        )
 
 
     # ------------------------------------------------------------------
-    # Helpers
+    # State machine helpers
     # ------------------------------------------------------------------
-    def set_state(self, new_state: MissionState):
+    def set_state(self, new_state: ArmMissionState):
+        """Transition to a new state."""
         if new_state != self.state:
+            self.get_logger().info(f"State transition: {self.state.name} -> {new_state.name}")
             self.state = new_state
             self.state_entered = True
-            # Reset per-state variables if needed
-            if new_state == MissionState.MOVE_FORWARD_1M:
-                self.move_start_time = self.get_clock().now()
 
 
-    def stop_base(self):
-        self.cmd_pub.publish(Twist())
-
-
-    def bottle_is_fresh(self):
-        if self.best_bbox is None or self.last_seen_time is None:
+    def is_detection_fresh(self):
+        """Check if we've seen an object recently."""
+        if not self.object_detected or self.last_detection_time is None:
             return False
-        age = (self.get_clock().now() - self.last_seen_time).nanoseconds / 1e9
-        return age <= self.bottle_timeout_sec
+        
+        age = (self.get_clock().now() - self.last_detection_time).nanoseconds / 1e9
+        return age <= self.detection_timeout
 
 
-    def get_error_and_close(self):
+    def calculate_arm_position_from_object(self, yolo_data: YOLOData):
         """
+        Calculate arm joint positions based on object location in camera frame.
+        
+        Strategy:
+        - joint1 (base rotation): Turn arm left/right to track horizontal object position
+        - joint2, joint3, joint4: Adjust based on object distance (bbox size)
+        
+        Args:
+            yolo_data: YOLO detection data
+            
         Returns:
-            (error_px, close_enough_bool)
+            dict: Target joint positions
         """
-        x = float(self.best_bbox['bbox_x'])
-        w = float(self.best_bbox['bbox_w'])
+        # Calculate object center
+        obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
+        obj_center_y = yolo_data.bbox_y + (yolo_data.bbox_h / 2.0)
+        
+        # Calculate horizontal offset from image center (-1.0 to 1.0)
+        image_center_x = self.image_width / 2.0
+        offset_x = (obj_center_x - image_center_x) / image_center_x
+        
+        # Calculate vertical offset from image center (-1.0 to 1.0)
+        image_center_y = self.image_height / 2.0
+        offset_y = (obj_center_y - image_center_y) / image_center_y
+        
+        # Map horizontal offset to joint1 rotation (-1.5 to 1.5 radians)
+        # Positive offset (right) -> rotate right (positive angle)
+        joint1_target = offset_x * 1.5
+        
+        # Map bbox size to arm extension
+        # Small bbox (far) -> extend more, Large bbox (close) -> retract
+        bbox_ratio = yolo_data.bbox_w / self.image_width
+        
+        if bbox_ratio < 0.15:  # Far away
+            joint2_target = -0.6
+            joint3_target = 0.3
+            joint4_target = 0.9
+        elif bbox_ratio < 0.3:  # Medium distance
+            joint2_target = -0.7
+            joint3_target = 0.4
+            joint4_target = 1.0
+        else:  # Close
+            joint2_target = -0.8
+            joint3_target = 0.5
+            joint4_target = 1.0
+        
+        # Adjust joint2 based on vertical position (simple compensation)
+        joint2_target -= offset_y * 0.2
+        
+        return {
+            'joint1': joint1_target,
+            'joint2': joint2_target,
+            'joint3': joint3_target,
+            'joint4': joint4_target
+        }
 
-        bbox_cx = x + w / 2.0
-        error = bbox_cx - self.img_cx
 
-        close_enough = w >= self.close_bbox_w
-        return error, close_enough
-
-
-    def publish_align(self):
+    def control_base_towards_object(self, yolo_data: YOLOData):
         """
-        Rotate to center bottle.
+        Control robot base to approach the detected object.
+        Similar to TeleopBase logic.
+        
+        Args:
+            yolo_data: YOLO detection data
+            
+        Returns:
+            bool: True if object is close enough (stopped moving)
         """
-        error, _ = self.get_error_and_close()
-        aligned = abs(error) < self.align_tol_px
-
-        t = Twist()
-        t.linear.x = 0.0
-        t.angular.z = -self.ang_k * error
-        self.cmd_pub.publish(t)
-
-        return aligned
-
-
-    def publish_approach(self):
-        """
-        Approach slowly, only forward when aligned.
-        """
-        error, close_enough = self.get_error_and_close()
-        aligned = abs(error) < self.align_tol_px
-
-        t = Twist()
-        t.angular.z = -self.ang_k * error
-
-        if aligned and not close_enough:
-            t.linear.x = self.approach_v
+        # Calculate object center
+        bbox_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
+        image_center_x = self.image_width / 2.0
+        offset_x = bbox_center_x - image_center_x
+        
+        # Determine turning velocity
+        if abs(offset_x) > self.center_tolerance:
+            angular_ratio = -offset_x / (self.image_width / 2.0)
+            angular_ratio = max(-1.0, min(1.0, angular_ratio))
+            angular_vel = angular_ratio * self.turn_speed
         else:
-            t.linear.x = 0.0
-
-        self.cmd_pub.publish(t)
-        return close_enough
-
-
-    def publish_move_forward_1m(self):
-        """
-        Non-blocking open-loop motion.
-        """
-        if self.move_start_time is None:
-            self.move_start_time = self.get_clock().now()
-
-        elapsed = (self.get_clock().now() - self.move_start_time).nanoseconds / 1e9
-        if elapsed >= self.move_time:
-            self.stop_base()
-            return True
-
-        t = Twist()
-        t.linear.x = self.move_speed
-        t.angular.z = 0.0
-        self.cmd_pub.publish(t)
-        return False
+            angular_vel = 0.0
+        
+        # Determine forward velocity based on bbox size
+        if yolo_data.bbox_w < self.bbox_threshold:
+            linear_vel = self.forward_speed
+        else:
+            linear_vel = 0.0  # Object is close enough, stop
+        
+        # Send velocity command
+        self.teleop_pub.set_velocity(linear_x=linear_vel, angular_z=angular_vel)
+        
+        return linear_vel == 0.0  # Return True if we've stopped (close enough)
 
 
     # ------------------------------------------------------------------
-    # Threaded arm action helpers
+    # Arm action threads
     # ------------------------------------------------------------------
-    def _grab_thread_func(self):
-        """Thread function to execute grab sequence."""
+    def _prepare_arm_thread(self):
+        """Move arm to pre-grab position."""
         try:
-            self.get_logger().info("Starting GRAB sequence in thread...")
-            self.arm.grab()
+            self.get_logger().info("Moving arm to pre-grab position...")
+            
+            # Wait for joint states to be available
+            timeout = 5.0
+            start = time.time()
+            while not self.teleop_sub.have_joint_states:
+                if time.time() - start > timeout:
+                    raise RuntimeError("Timeout waiting for joint states")
+                time.sleep(0.1)
+            
+            # Open gripper first
+            self.get_logger().info("Opening gripper...")
+            self.teleop_pub.gripper_open()
+            time.sleep(1.5)
+            
+            # Move arm to pre-grab position
+            self.get_logger().info("Moving to pre-grab position...")
+            target_positions = {
+                'joint1': 0.0,
+                'joint2': -0.3,
+                'joint3': -0.4,
+                'joint4': 0.0
+            }
+            self.teleop_pub.send_arm_trajectory(target_positions)
+            time.sleep(2.0)
+            
+            self.arm_action_complete = True
+            self.arm_action_failed = False
+            self.get_logger().info("Arm preparation complete!")
+        except Exception as e:
+            self.get_logger().error(f"Arm preparation failed: {e}")
+            self.arm_action_complete = True
+            self.arm_action_failed = True
+
+
+    def _grab_thread(self):
+        """Execute complete grab sequence."""
+        try:
+            self.get_logger().info("Starting GRAB sequence...")
+            
+            # Step 1: Pre-grasp position
+            self.get_logger().info("Moving to pre-grasp...")
+            self.teleop_pub.send_arm_trajectory({
+                'joint1': 0.0,
+                'joint2': -0.6,
+                'joint3': 0.3,
+                'joint4': 0.9
+            })
+            time.sleep(2.0)
+            
+            # Step 2: Approach grasp
+            self.get_logger().info("Approaching object...")
+            self.teleop_pub.send_arm_trajectory({
+                'joint1': 0.0,
+                'joint2': -0.8,
+                'joint3': 0.5,
+                'joint4': 1.0
+            })
+            time.sleep(2.0)
+            
+            # Step 3: Close gripper
+            self.get_logger().info("Closing gripper...")
+            self.teleop_pub.gripper_close()
+            time.sleep(2.0)
+            
+            # Step 4: Lift
+            self.get_logger().info("Lifting object...")
+            self.teleop_pub.send_arm_trajectory({
+                'joint1': 0.0,
+                'joint2': -0.4,
+                'joint3': 0.2,
+                'joint4': 0.8
+            })
+            time.sleep(2.0)
+            
             self.arm_action_complete = True
             self.arm_action_failed = False
             self.get_logger().info("GRAB sequence completed successfully!")
@@ -226,11 +345,36 @@ class Part2Mission(Node):
             self.arm_action_failed = True
 
 
-    def _release_thread_func(self):
-        """Thread function to execute release sequence."""
+    def _release_thread(self):
+        """Execute release sequence."""
         try:
-            self.get_logger().info("Starting RELEASE sequence in thread...")
-            self.arm.release()
+            self.get_logger().info("Starting RELEASE sequence...")
+            
+            # Step 1: Lower slightly
+            self.get_logger().info("Lowering arm...")
+            self.teleop_pub.send_arm_trajectory({
+                'joint1': 0.0,
+                'joint2': -0.7,
+                'joint3': 0.4,
+                'joint4': 0.9
+            })
+            time.sleep(2.0)
+            
+            # Step 2: Open gripper
+            self.get_logger().info("Opening gripper...")
+            self.teleop_pub.gripper_open()
+            time.sleep(2.0)
+            
+            # Step 3: Retract
+            self.get_logger().info("Retracting arm...")
+            self.teleop_pub.send_arm_trajectory({
+                'joint1': 0.0,
+                'joint2': -0.3,
+                'joint3': 0.1,
+                'joint4': 0.6
+            })
+            time.sleep(2.0)
+            
             self.arm_action_complete = True
             self.arm_action_failed = False
             self.get_logger().info("RELEASE sequence completed successfully!")
@@ -240,136 +384,151 @@ class Part2Mission(Node):
             self.arm_action_failed = True
 
 
+    def start_arm_action(self, thread_func):
+        """Start an arm action in a separate thread."""
+        self.arm_action_complete = False
+        self.arm_action_failed = False
+        self.arm_thread = threading.Thread(target=thread_func, daemon=True)
+        self.arm_thread.start()
+
+
     # ------------------------------------------------------------------
-    # Main tick
+    # Main tick (state machine)
     # ------------------------------------------------------------------
     def tick(self):
-        # If we lose bottle during align/approach, go back to searching
-        if self.state in (MissionState.SEARCH_ALIGN, MissionState.APPROACH):
-            if not self.bottle_is_fresh():
-                self.best_bbox = None
-                self.last_seen_time = None
-                self.stop_base()
-                self.set_state(MissionState.SEARCH_ALIGN)
-                self.state_entered = False  # already handled
-                return
-
-        # ------------------- STATE: SEARCH_ALIGN -------------------
-        if self.state == MissionState.SEARCH_ALIGN:
-            # If no detection, just idle
-            if self.best_bbox is None:
-                self.stop_base()
-                if self.state_entered:
-                    self.get_logger().info("Waiting for YOLO detections on 'yolo_topic'...")
-                    self.state_entered = False
-                return
-
-            aligned = self.publish_align()
-            if aligned:
-                self.stop_base()
-                self.set_state(MissionState.APPROACH)
+        """Main state machine tick."""
+        
+        # ------------------- STATE: WAITING -------------------
+        if self.state == ArmMissionState.WAITING:
+            if self.state_entered:
+                self.get_logger().info("Waiting for object detection...")
+                self.state_entered = False
+                # Stop any movement
+                self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
+            
+            # Check if we have a fresh detection
+            if self.is_detection_fresh():
+                self.get_logger().info("Object detected! Approaching...")
+                self.set_state(ArmMissionState.APPROACHING)
             return
 
-        # ------------------- STATE: APPROACH -------------------
-        if self.state == MissionState.APPROACH:
-            close_enough = self.publish_approach()
-            if close_enough:
-                self.stop_base()
-                self.set_state(MissionState.GRAB)
+        # ------------------- STATE: APPROACHING -------------------
+        if self.state == ArmMissionState.APPROACHING:
+            if self.state_entered:
+                self.get_logger().info("Approaching object with coordinated base and arm control...")
+                self.state_entered = False
+            
+            # Check if detection is still fresh
+            if not self.is_detection_fresh() or self.last_yolo_data is None:
+                self.get_logger().warn("Lost object detection, returning to WAITING")
+                self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
+                self.object_detected = False
+                self.set_state(ArmMissionState.WAITING)
+                return
+            
+            # Update arm position to track object
+            arm_positions = self.calculate_arm_position_from_object(self.last_yolo_data)
+            self.teleop_pub.send_arm_trajectory(arm_positions)
+            
+            # Control base to approach object
+            is_close_enough = self.control_base_towards_object(self.last_yolo_data)
+            
+            # If object is close enough, prepare for grab
+            if is_close_enough:
+                self.get_logger().info("Object in range! Preparing for grab...")
+                self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
+                self.set_state(ArmMissionState.PREPARING)
             return
 
-        # ------------------- STATE: GRAB -------------------
-        if self.state == MissionState.GRAB:
+        # ------------------- STATE: PREPARING -------------------
+        if self.state == ArmMissionState.PREPARING:
             if self.state_entered:
                 self.state_entered = False
-                self.stop_base()
-                self.get_logger().info("Executing GRAB sequence...")
-                
-                # Reset flags
-                self.arm_action_complete = False
-                self.arm_action_failed = False
-                
-                # Start grab in separate thread
-                self.arm_thread = threading.Thread(
-                    target=self._grab_thread_func,
-                    daemon=True
-                )
-                self.arm_thread.start()
-                
-                # Transition to waiting state
-                self.set_state(MissionState.GRAB_IN_PROGRESS)
-            return
-
-        # ------------------- STATE: GRAB_IN_PROGRESS -------------------
-        if self.state == MissionState.GRAB_IN_PROGRESS:
-            # Wait for arm action to complete
+                # Ensure base is stopped
+                self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
+                self.start_arm_action(self._prepare_arm_thread)
+                return
+            
+            # Wait for preparation to complete
             if self.arm_action_complete:
                 if self.arm_action_failed:
-                    self.get_logger().error("Grab failed, returning to search")
-                    self.set_state(MissionState.SEARCH_ALIGN)
+                    self.get_logger().error("Arm preparation failed, returning to WAITING")
+                    self.object_detected = False
+                    self.set_state(ArmMissionState.WAITING)
                 else:
-                    self.get_logger().info("Grab successful, moving forward")
-                    self.set_state(MissionState.MOVE_FORWARD_1M)
-            else:
-                # Still waiting, keep robot stopped
-                self.stop_base()
+                    self.get_logger().info("Preparation complete! Starting grab...")
+                    self.set_state(ArmMissionState.GRABBING)
             return
 
-        # ------------------- STATE: MOVE_FORWARD_1M -------------------
-        if self.state == MissionState.MOVE_FORWARD_1M:
-            done = self.publish_move_forward_1m()
-            if done:
-                self.set_state(MissionState.RELEASE)
-            return
-
-        # ------------------- STATE: RELEASE -------------------
-        if self.state == MissionState.RELEASE:
+        # ------------------- STATE: GRABBING -------------------
+        if self.state == ArmMissionState.GRABBING:
             if self.state_entered:
                 self.state_entered = False
-                self.stop_base()
-                self.get_logger().info("Executing RELEASE sequence...")
-                
-                # Reset flags
-                self.arm_action_complete = False
-                self.arm_action_failed = False
-                
-                # Start release in separate thread
-                self.arm_thread = threading.Thread(
-                    target=self._release_thread_func,
-                    daemon=True
-                )
-                self.arm_thread.start()
-                
-                # Transition to waiting state
-                self.set_state(MissionState.RELEASE_IN_PROGRESS)
+                self.start_arm_action(self._grab_thread)
+                return
+            
+            # Wait for grab to complete
+            if self.arm_action_complete:
+                if self.arm_action_failed:
+                    self.get_logger().error("Grab failed, returning to WAITING")
+                    self.object_detected = False
+                    self.set_state(ArmMissionState.WAITING)
+                else:
+                    self.get_logger().info("Grab successful! Holding object...")
+                    self.set_state(ArmMissionState.HOLDING)
             return
 
-        # ------------------- STATE: RELEASE_IN_PROGRESS -------------------
-        if self.state == MissionState.RELEASE_IN_PROGRESS:
-            # Wait for arm action to complete
+        # ------------------- STATE: HOLDING -------------------
+        if self.state == ArmMissionState.HOLDING:
+            if self.state_entered:
+                self.get_logger().info("Holding object for 2 seconds...")
+                self.state_entered = False
+                self.hold_start_time = self.get_clock().now()
+            
+            # Hold for 2 seconds, then release
+            elapsed = (self.get_clock().now() - self.hold_start_time).nanoseconds / 1e9
+            if elapsed >= 2.0:
+                self.get_logger().info("Releasing object...")
+                self.set_state(ArmMissionState.RELEASING)
+            return
+
+        # ------------------- STATE: RELEASING -------------------
+        if self.state == ArmMissionState.RELEASING:
+            if self.state_entered:
+                self.state_entered = False
+                self.start_arm_action(self._release_thread)
+                return
+            
+            # Wait for release to complete
             if self.arm_action_complete:
                 if self.arm_action_failed:
                     self.get_logger().error("Release failed, but continuing to DONE")
                 else:
-                    self.get_logger().info("Release successful")
-                self.set_state(MissionState.DONE)
-            else:
-                # Still waiting, keep robot stopped
-                self.stop_base()
+                    self.get_logger().info("Release successful!")
+                self.set_state(ArmMissionState.DONE)
             return
 
         # ------------------- STATE: DONE -------------------
-        if self.state == MissionState.DONE:
-            self.stop_base()
+        if self.state == ArmMissionState.DONE:
+            if self.state_entered:
+                self.get_logger().info("Mission complete! Resetting to WAITING...")
+                self.state_entered = False
+                self.object_detected = False
+                time.sleep(1.0)
+                self.set_state(ArmMissionState.WAITING)
             return
 
 
 def main():
     rclpy.init()
-    node = Part2Mission()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    node = TeleopArm()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':
