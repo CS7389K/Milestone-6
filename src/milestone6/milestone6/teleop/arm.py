@@ -150,7 +150,9 @@ class TeleopArm(Node):
         
         Strategy:
         - joint1 (base rotation): Turn arm left/right to track horizontal object position
-        - joint2, joint3, joint4: Adjust based on object distance (bbox size)
+        - joint2 (shoulder pitch): Adjust up/down based on vertical object position
+        - joint3 (elbow pitch): Adjust reach based on distance (bbox size)
+        - joint4 (wrist pitch): Complement joint2/joint3 to maintain gripper angle
         
         Args:
             yolo_data: YOLO detection data
@@ -171,40 +173,41 @@ class TeleopArm(Node):
         image_center_y = self.image_height / 2.0
         offset_y = (obj_center_y - image_center_y) / image_center_y
         
-        # Map horizontal offset to joint1 rotation (-1.5 to 1.5 radians)
-        # Positive offset (right) -> rotate right (positive angle)
-        joint1_target = offset_x * 1.5
-        
-        # Map bbox size to arm extension
-        # Small bbox (far) -> extend more, Large bbox (close) -> retract
+        # Calculate distance estimate from bbox size
         bbox_ratio = yolo_data.bbox_w / self.image_width
         
-        if bbox_ratio < 0.15:  # Far away
-            self.get_logger().info("Object far away")
-            joint2_target = -0.6
-            joint3_target = 0.3
-            joint4_target = 0.9
-        elif bbox_ratio < 0.3:  # Medium distance
-            self.get_logger().info("Object far medium distance")
-            joint2_target = -0.7
-            joint3_target = 0.4
-            joint4_target = 1.0
-        else:  # Close
-            self.get_logger().info("Object close")
-            joint2_target = -1.8
-            joint3_target = 0.5
-            joint4_target = 1.0
+        # Joint1: Horizontal rotation (yaw) to center object
+        # Positive offset (right) -> rotate right (positive angle)
+        joint1_target = offset_x * 1.5  # Scale to reasonable angle range
         
-        # Adjust joint2 based on vertical position
-        # Convention: more negative joint2 = arm down, less negative = arm up
-        # Positive offset_y (object lower in image) -> subtract to make more negative (arm down)
-        # Negative offset_y (object higher in image) -> add (less subtraction) to make less negative (arm up)
-        joint2_adjustment = -offset_y * 0.2
-        joint2_target += joint2_adjustment
+        # Joint2 (shoulder pitch): Vertical positioning
+        # Base position around -0.5 to -0.9 (arm angled down for picking)
+        # Positive offset_y (object lower) -> MORE negative (arm down more)
+        # Negative offset_y (object higher) -> LESS negative (arm up more)
+        joint2_base = -0.7  # Base downward angle
+        joint2_vertical_adjust = offset_y * 0.3  # Adjust based on vertical position
+        joint2_target = joint2_base - joint2_vertical_adjust
+        
+        # Joint3 (elbow pitch): Forward reach based on distance
+        # Larger bbox (closer) -> less extension
+        # Smaller bbox (farther) -> more extension
+        # Range typically 0.2 to 0.6 radians
+        joint3_min = 0.2  # Minimum extension (close)
+        joint3_max = 0.6  # Maximum extension (far)
+        # Invert bbox_ratio so smaller bbox = larger extension
+        joint3_target = joint3_max - (bbox_ratio * (joint3_max - joint3_min) / 0.5)
+        joint3_target = max(joint3_min, min(joint3_max, joint3_target))  # Clamp
+        
+        # Joint4 (wrist pitch): Compensate to keep gripper level
+        # Should roughly equal -(joint2 + joint3) to maintain orientation
+        joint4_target = -(joint2_target + joint3_target) + 0.2  # Small offset for slight downward angle
         
         self.get_logger().info(
-            f"Arm calc: offset_y={offset_y:.2f}, adjustment={joint2_adjustment:.3f}, "
-            f"joint2={joint2_target:.3f}"
+            f"Arm calc: bbox_ratio={bbox_ratio:.3f}, offset_x={offset_x:.2f}, offset_y={offset_y:.2f}"
+        )
+        self.get_logger().info(
+            f"  Targets: j1={joint1_target:.3f}, j2={joint2_target:.3f}, "
+            f"j3={joint3_target:.3f}, j4={joint4_target:.3f}"
         )
         
         return {
