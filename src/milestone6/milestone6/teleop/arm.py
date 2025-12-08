@@ -160,14 +160,13 @@ class TeleopArm(Node):
     def calculate_arm_position_from_object(self, yolo_data: YOLOData):
         """
         Calculate arm joint positions based on object location in camera frame.
-        Uses the manipulator reference frame (first detection) as coordinate origin.
+        Uses a base "ready to pick" position and adjusts based on object location.
         
-        Strategy:
-        - Uses the first detection as the manipulator's coordinate frame origin
-        - joint1 (base rotation): Turn arm left/right to track horizontal object position
-        - joint2 (shoulder pitch): Adjust up/down based on vertical object position
-        - joint3 (elbow pitch): Adjust reach based on distance (bbox size)
-        - joint4 (wrist pitch): Complement joint2/joint3 to maintain gripper angle
+        Strategy inspired by ROBOTIS approach but adapted for YOLO detections:
+        - Start from a known good "pick ready" pose
+        - Adjust joint1 (base rotation) for horizontal alignment
+        - Keep joint2/joint3/joint4 in proven picking configuration
+        - Make small adjustments based on object position
         
         Args:
             yolo_data: YOLO detection data
@@ -175,7 +174,7 @@ class TeleopArm(Node):
         Returns:
             dict: Target joint positions
         """
-        # Use reference frame if available, otherwise use current detection as reference
+        # Use reference frame if available
         reference_frame = self.manipulator_reference_frame if self.manipulator_reference_frame else yolo_data
         
         # Calculate object center in current frame
@@ -186,71 +185,45 @@ class TeleopArm(Node):
         ref_center_x = reference_frame.bbox_x + (reference_frame.bbox_w / 2.0)
         ref_center_y = reference_frame.bbox_y + (reference_frame.bbox_h / 2.0)
         
-        # Calculate offset from reference frame (manipulator coordinates)
-        # This gives us the object position relative to where we first saw it
+        # Calculate offset from reference frame
         delta_x = obj_center_x - ref_center_x
-        delta_y = obj_center_y - ref_center_y
         
-        # Normalize to manipulator frame (-1.0 to 1.0 range)
-        # Use reference frame size for normalization to maintain consistent scaling
+        # Normalize horizontal offset (-1.0 to 1.0)
         offset_x = delta_x / (reference_frame.bbox_w / 2.0) if reference_frame.bbox_w > 0 else 0.0
-        offset_y = delta_y / (reference_frame.bbox_h / 2.0) if reference_frame.bbox_h > 0 else 0.0
-        
-        # Calculate distance estimate from bbox size change
-        # Larger bbox (closer) means less reach needed
-        # Compare current size to reference size
-        size_ratio = yolo_data.bbox_w / reference_frame.bbox_w if reference_frame.bbox_w > 0 else 1.0
         
         # Log reference frame usage
         if self.manipulator_reference_frame:
             self.get_logger().info(
                 f"Using reference frame: ref_center=({ref_center_x:.1f},{ref_center_y:.1f}), "
                 f"obj_center=({obj_center_x:.1f},{obj_center_y:.1f}), "
-                f"delta=({delta_x:.1f},{delta_y:.1f})"
+                f"delta_x={delta_x:.1f}"
             )
         
-        # Joint1: Horizontal rotation (yaw) to center object in manipulator frame
-        # Positive offset (right in camera) -> rotate right (positive angle)
-        # Scale conservatively to avoid over-rotation
-        joint1_target = offset_x * 1.2  # Reduced from 1.5 for more precise control
+        # === BASE PICKING POSE (empirically determined, arm reaches down and forward to camera level) ===
+        # These values should work for objects at camera level in front of the robot
         
-        # Joint2 (shoulder pitch): MUST reach DOWN significantly since arm is above camera
-        # Camera is mounted LOW, arm base is HIGH - need aggressive downward angle
-        # More negative = more downward
-        # Base position should be very negative to reach camera level
-        joint2_base = -1.3  # Very aggressive downward angle to reach camera level
-        joint2_vertical_adjust = offset_y * 0.3  # Adjust based on object position in frame
-        joint2_target = joint2_base - joint2_vertical_adjust
-        # Clamp to safe limits
-        joint2_target = max(-1.57, min(-0.8, joint2_target))  # -90° to -45° roughly
+        # Joint1: Base rotation - adjust for horizontal position only
+        joint1_base = 0.0  # Straight ahead
+        joint1_target = joint1_base + (offset_x * 0.8)  # Moderate adjustment for object offset
+        joint1_target = max(-1.0, min(1.0, joint1_target))  # Clamp to safe range
         
-        # Joint3 (elbow pitch): MUST extend significantly to reach forward to camera level
-        # The arm needs to reach both DOWN and FORWARD from its elevated position
-        # Larger values = more extension
-        joint3_min = 0.8   # Significant extension even when close
-        joint3_max = 1.4   # Maximum safe extension
+        # Joint2: Shoulder pitch - FIXED aggressive downward angle to reach camera level
+        # This is the critical joint for reaching down from elevated arm base to camera level
+        joint2_target = -1.2  # Very negative = reaching down significantly
         
-        # When size_ratio > 1: object is closer (larger than reference), need less extension
-        # When size_ratio < 1: object is farther (smaller than reference), need more extension
-        if size_ratio >= 1.0:
-            # Object is closer or same size - reduce extension slightly
-            joint3_target = joint3_min + (1.0 - min(size_ratio - 1.0, 0.5)) * (joint3_max - joint3_min) * 0.4
-        else:
-            # Object is farther - increase extension
-            joint3_target = joint3_min + (1.0 - size_ratio) * (joint3_max - joint3_min)
+        # Joint3: Elbow pitch - FIXED forward extension
+        # This extends the arm forward to reach objects in camera view
+        joint3_target = 1.1  # Significant forward extension
         
-        joint3_target = max(joint3_min, min(joint3_max, joint3_target))  # Clamp
-        
-        # Joint4 (wrist pitch): Compensate to keep gripper level and angled down
-        # Should roughly equal -(joint2 + joint3) to maintain orientation
-        # But since joint2 and joint3 are both large, we need significant compensation
-        joint4_target = -(joint2_target + joint3_target) + 0.3  # Compensate with slight downward angle
+        # Joint4: Wrist pitch - Compensate to keep gripper oriented correctly
+        # Should roughly equal -(joint2 + joint3) to keep gripper level
+        joint4_target = -(joint2_target + joint3_target) + 0.2  # Adds slight downward tilt
         
         self.get_logger().info(
-            f"Arm calc: size_ratio={size_ratio:.3f}, offset_x={offset_x:.2f}, offset_y={offset_y:.2f}"
+            f"Arm positioning: offset_x={offset_x:.2f}"
         )
         self.get_logger().info(
-            f"  Targets: j1={joint1_target:.3f}, j2={joint2_target:.3f}, "
+            f"  Fixed pose targets: j1={joint1_target:.3f}, j2={joint2_target:.3f}, "
             f"j3={joint3_target:.3f}, j4={joint4_target:.3f}"
         )
         
@@ -339,13 +312,13 @@ class TeleopArm(Node):
                 self.teleop_pub.send_arm_trajectory(arm_positions)
                 time.sleep(2.0)
                 
-                # Extend to grasp - reach forward by tilting shoulder UP (less negative)
+                # Approach for grasp - small forward movement
                 self.get_logger().info("Approaching for grasp...")
                 grasp_positions = {
                     'joint1': arm_positions['joint1'],
-                    'joint2': min(-0.8, arm_positions['joint2'] + 0.2),   # Tilt forward (LESS negative = forward)
-                    'joint3': min(1.5, arm_positions['joint3'] + 0.15),   # Extend forward more
-                    'joint4': arm_positions['joint4'] - 0.3                # Adjust wrist to compensate
+                    'joint2': arm_positions['joint2'],  # Keep same angle
+                    'joint3': min(1.5, arm_positions['joint3'] + 0.1),  # Extend slightly more
+                    'joint4': arm_positions['joint4']   # Keep same wrist angle
                 }
                 self.teleop_pub.send_arm_trajectory(grasp_positions)
                 time.sleep(2.0)
