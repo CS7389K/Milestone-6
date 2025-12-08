@@ -37,11 +37,7 @@ class TeleopPublisher:
     - https://github.com/ROBOTIS-GIT/turtlebot3_manipulation/blob/humble/turtlebot3_manipulation_teleop/
     """
 
-    def __init__(
-            self,
-            node,
-            teleop_subscriber=None
-        ):
+    def __init__(self, node):
         """
         Initialize the teleop publisher.
         
@@ -50,7 +46,6 @@ class TeleopPublisher:
             joint_state_subscriber: Optional JointStateSubscriber for arm control
         """
         self._node = node
-        self._teleop_sub = teleop_subscriber
         
         # Create service clients for MoveIt servo
         self.servo_start_client = node.create_client(Trigger, SERVO_START_SRV)
@@ -219,35 +214,6 @@ class TeleopPublisher:
         goal = FollowJointTrajectory.Goal()
         goal.trajectory = jt
         self.arm_traj_ac.send_goal_async(goal)
-
-    def step_joint(self, joint_name: str, delta: float):
-        """
-        Nudge a single joint by delta radians.
-        
-        Args:
-            joint_name: Name of the joint to move
-            delta: Change in position (radians)
-        """
-        if not self._teleop_sub:
-            self._node.get_logger().warn('No joint state subscriber available.')
-            return
-        
-        if self._teleop_sub.update_target(joint_name, delta):
-            self.send_arm_trajectory(self._teleop_sub.target_positions)
-
-    def move_pose(self, pose_key: str):
-        """
-        Move arm to a predefined pose.
-        
-        Args:
-            pose_key: Key for predefined pose ("home", "extend", "custom")
-        """
-        if pose_key not in POSES:
-            self._node.get_logger().warn(f'Unknown pose: {pose_key}')
-            return
-        
-        for joint, delta in POSES[pose_key].items():
-            self.step_joint(joint, delta)
 
     def shutdown(self):
         """Shutdown the teleop publisher."""

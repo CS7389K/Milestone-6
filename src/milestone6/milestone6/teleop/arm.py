@@ -110,7 +110,6 @@ class TeleopArm(Node):
 
         # State machine
         self.state = ArmMissionState.WAITING
-        self.state_entered = True
 
         # Threading
         self.arm_action_complete = False
@@ -151,21 +150,9 @@ class TeleopArm(Node):
     # ------------------------------------------------------------------
     def set_state(self, new_state: ArmMissionState):
         """Transition to a new state."""
-        self.get_logger().info(f"Requesting state transition to {new_state.name}")
         if new_state != self.state:
             self.get_logger().info(f"State transition: {self.state.name} -> {new_state.name}")
             self.state = new_state
-            self.state_entered = True
-
-
-    def is_detection_fresh(self):
-        """Check if we've seen an object recently."""
-        self.get_logger().debug("Checking if detection is fresh")
-        if not self.object_detected or self.last_detection_time is None:
-            return False
-        
-        age = (self.get_clock().now() - self.last_detection_time).nanoseconds / 1e9
-        return age <= self.detection_timeout
 
 
     def calculate_arm_position_from_object(self, yolo_data: YOLOData):
@@ -235,64 +222,29 @@ class TeleopArm(Node):
             'joint4': joint4_target
         }
 
-
-    def control_base_towards_object(self, yolo_data: YOLOData):
-        """
-        Control robot base to approach the detected object.
-        Similar to TeleopBase logic.
-        
-        Args:
-            yolo_data: YOLO detection data
-            
-        Returns:
-            bool: True if object is close enough (stopped moving)
-        """
-        # Calculate object center
-        bbox_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
-        image_center_x = self.image_width / 2.0
-        offset_x = bbox_center_x - image_center_x
-        
-        # Determine turning velocity
-        if abs(offset_x) > self.center_tolerance:
-            angular_ratio = -offset_x / (self.image_width / 2.0)
-            angular_ratio = max(-1.0, min(1.0, angular_ratio))
-            angular_vel = angular_ratio * self.turn_speed
-        else:
-            angular_vel = 0.0
-        
-        # Determine forward velocity based on bbox size
-        if yolo_data.bbox_w < self.bbox_threshold:
-            linear_vel = self.forward_speed
-        else:
-            linear_vel = 0.0  # Object is close enough, stop
-        
-        # Send velocity command
-        self.teleop_pub.set_velocity(linear_x=linear_vel, angular_z=angular_vel)
-        
-        return linear_vel == 0.0  # Return True if we've stopped (close enough)
-
-
     # ------------------------------------------------------------------
     # Arm action threads
     # ------------------------------------------------------------------
     def _prepare_arm_thread(self):
-        """Open gripper and move arm to ready position."""
+        """Open gripper and position arm based on object detection."""
         try:
             self.get_logger().info("Preparing arm for grab sequence...")
+            
+            if self.last_yolo_data is None:
+                self.get_logger().error("No detection data available!")
+                self.arm_action_complete = True
+                self.arm_action_failed = True
+                return
             
             # Open gripper first
             self.get_logger().info("Opening gripper...")
             self.teleop_pub.gripper_open()
             time.sleep(1.5)
             
-            # Move arm to ready position
-            self.get_logger().info("Moving arm to ready position...")
-            target_positions = {
-                'joint1': 0.0,
-                'joint2': -0.3,
-                'joint3': -0.4,
-                'joint4': 0.0
-            }
+            # Calculate arm position based on detected object
+            self.get_logger().info("Moving arm to track detected object...")
+            target_positions = self.calculate_arm_position_from_object(self.last_yolo_data)
+            self.get_logger().info(f"Target positions: {target_positions}")
             self.teleop_pub.send_arm_trajectory(target_positions)
             time.sleep(2.0)
             
@@ -306,28 +258,34 @@ class TeleopArm(Node):
 
 
     def _grab_thread(self):
-        """Execute complete grab sequence."""
+        """Execute grab sequence based on detected object position."""
         try:
             self.get_logger().info("Starting GRAB sequence...")
             
-            # Step 1: Pre-grasp position
-            self.get_logger().info("Moving to pre-grasp...")
-            self.teleop_pub.send_arm_trajectory({
-                'joint1': 0.0,
-                'joint2': -0.6,
-                'joint3': 0.3,
-                'joint4': 0.9
-            })
+            if self.last_yolo_data is None:
+                self.get_logger().error("No detection data available for grab!")
+                self.arm_action_complete = True
+                self.arm_action_failed = True
+                return
+            
+            # Calculate dynamic positions based on object
+            arm_positions = self.calculate_arm_position_from_object(self.last_yolo_data)
+            bbox_ratio = self.last_yolo_data.bbox_w / self.image_width
+            
+            # Step 1: Position arm towards object (already done in prepare, but recalculate for accuracy)
+            self.get_logger().info("Positioning arm towards object...")
+            self.teleop_pub.send_arm_trajectory(arm_positions)
             time.sleep(2.0)
             
-            # Step 2: Approach grasp
-            self.get_logger().info("Approaching object...")
-            self.teleop_pub.send_arm_trajectory({
-                'joint1': 0.0,
-                'joint2': -0.8,
-                'joint3': 0.5,
-                'joint4': 1.0
-            })
+            # Step 2: Extend further to approach for grasp (adjust joint2 down, joint3/4 forward)
+            self.get_logger().info("Approaching for grasp...")
+            grasp_positions = {
+                'joint1': arm_positions['joint1'],  # Keep horizontal rotation
+                'joint2': arm_positions['joint2'] - 0.2,  # Reach down more
+                'joint3': arm_positions['joint3'] + 0.2,  # Extend forward
+                'joint4': arm_positions['joint4'] + 0.1   # Fine adjustment
+            }
+            self.teleop_pub.send_arm_trajectory(grasp_positions)
             time.sleep(2.0)
             
             # Step 3: Close gripper
@@ -337,12 +295,13 @@ class TeleopArm(Node):
             
             # Step 4: Lift
             self.get_logger().info("Lifting object...")
-            self.teleop_pub.send_arm_trajectory({
-                'joint1': 0.0,
-                'joint2': -0.4,
+            lift_positions = {
+                'joint1': arm_positions['joint1'],  # Keep horizontal rotation
+                'joint2': -0.4,  # Lift up
                 'joint3': 0.2,
                 'joint4': 0.8
-            })
+            }
+            self.teleop_pub.send_arm_trajectory(lift_positions)
             time.sleep(2.0)
             
             self.arm_action_complete = True
@@ -409,27 +368,26 @@ class TeleopArm(Node):
         
         # ------------------- STATE: WAITING -------------------
         if self.state == ArmMissionState.WAITING:
-            if self.state_entered:
-                self.get_logger().info("Waiting for object detection...")
-                self.state_entered = False
-                # Stop any movement
-                self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
+            # Stop any movement
+            self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
             
-            # Check if we have a fresh detection
-            if self.is_detection_fresh():
-                self.get_logger().info("Object detected! Preparing to grab...")
-                self.set_state(ArmMissionState.PREPARING)
+            # Check if we have a detection
+            if self.object_detected and self.last_detection_time is not None:
+                age = (self.get_clock().now() - self.last_detection_time).nanoseconds / 1e9
+                if age <= self.detection_timeout:
+                    self.get_logger().info("Object detected! Preparing to grab...")
+                    self.set_state(ArmMissionState.PREPARING)
             return
 
         # ------------------- STATE: PREPARING -------------------
         if self.state == ArmMissionState.PREPARING:
-            if self.state_entered:
-                self.get_logger().info("PREPARING STATE: Starting arm preparation thread...")
-                self.state_entered = False
-                # Ensure base is stopped
-                self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
-                self.start_arm_action(self._prepare_arm_thread)
-                return
+            # Start preparation if not already running
+            if not self.arm_thread or not self.arm_thread.is_alive():
+                if not self.arm_action_complete:
+                    self.get_logger().info("PREPARING STATE: Starting arm preparation thread...")
+                    # Ensure base is stopped
+                    self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
+                    self.start_arm_action(self._prepare_arm_thread)
             
             # Wait for preparation to complete
             if self.arm_action_complete:
@@ -444,10 +402,10 @@ class TeleopArm(Node):
 
         # ------------------- STATE: GRABBING -------------------
         if self.state == ArmMissionState.GRABBING:
-            if self.state_entered:
-                self.state_entered = False
-                self.start_arm_action(self._grab_thread)
-                return
+            # Start grab if not already running
+            if not self.arm_thread or not self.arm_thread.is_alive():
+                if not self.arm_action_complete:
+                    self.start_arm_action(self._grab_thread)
             
             # Wait for grab to complete
             if self.arm_action_complete:
@@ -462,24 +420,25 @@ class TeleopArm(Node):
 
         # ------------------- STATE: HOLDING -------------------
         if self.state == ArmMissionState.HOLDING:
-            if self.state_entered:
+            # Start holding timer if not set
+            if self.hold_start_time is None:
                 self.get_logger().info("Holding object for 2 seconds...")
-                self.state_entered = False
                 self.hold_start_time = self.get_clock().now()
             
             # Hold for 2 seconds, then release
             elapsed = (self.get_clock().now() - self.hold_start_time).nanoseconds / 1e9
             if elapsed >= 2.0:
+                self.hold_start_time = None
                 self.get_logger().info("Releasing object...")
                 self.set_state(ArmMissionState.RELEASING)
             return
 
         # ------------------- STATE: RELEASING -------------------
         if self.state == ArmMissionState.RELEASING:
-            if self.state_entered:
-                self.state_entered = False
-                self.start_arm_action(self._release_thread)
-                return
+            # Start release if not already running
+            if not self.arm_thread or not self.arm_thread.is_alive():
+                if not self.arm_action_complete:
+                    self.start_arm_action(self._release_thread)
             
             # Wait for release to complete
             if self.arm_action_complete:
@@ -492,12 +451,10 @@ class TeleopArm(Node):
 
         # ------------------- STATE: DONE -------------------
         if self.state == ArmMissionState.DONE:
-            if self.state_entered:
-                self.get_logger().info("Mission complete! Resetting to WAITING...")
-                self.state_entered = False
-                self.object_detected = False
-                time.sleep(1.0)
-                self.set_state(ArmMissionState.WAITING)
+            self.get_logger().info("Mission complete! Resetting to WAITING...")
+            self.object_detected = False
+            time.sleep(1.0)
+            self.set_state(ArmMissionState.WAITING)
             return
 
 
