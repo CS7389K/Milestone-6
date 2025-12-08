@@ -1,4 +1,4 @@
 git fetch
 git pull
-colcon build --symlink-install
+colcon build --packages-select milestone6
 source install/setup.bash
