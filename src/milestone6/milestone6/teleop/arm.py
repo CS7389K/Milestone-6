@@ -159,72 +159,61 @@ class TeleopArm(Node):
 
     def calculate_arm_position_from_object(self, yolo_data: YOLOData):
         """
-        Calculate arm joint positions based on object location in camera frame.
-        Uses a base "ready to pick" position and adjusts based on object location.
+        Calculate arm joint positions to reach for an object based on YOLO detection.
         
-        Strategy inspired by ROBOTIS approach but adapted for YOLO detections:
-        - Start from a known good "pick ready" pose
-        - Adjust joint1 (base rotation) for horizontal alignment
-        - Keep joint2/joint3/joint4 in proven picking configuration
-        - Make small adjustments based on object position
+        Maps 2D bounding box position to 3D arm joint angles.
+        Uses simple geometric mapping from camera frame to arm workspace.
         
-        Args:
-            yolo_data: YOLO detection data
-            
-        Returns:
-            dict: Target joint positions
+        Camera coordinate system:
+            - X axis: left (-) to right (+) in image
+            - Y axis: top (-) to bottom (+) in image
+            - Origin: center of image
+        
+        Arm joint configuration (TurtleBot3 manipulator):
+            - joint1 (base rotation): Rotates horizontally (-pi/2 to pi/2)
+            - joint2 (shoulder): Vertical lift (-1.5 to 0.5 radians)
+            - joint3 (elbow): Forward extension (0 to 1.5 radians)
+            - joint4 (wrist): Wrist pitch adjustment (0 to 1.0 radians)
         """
-        # Use reference frame if available
-        reference_frame = self.manipulator_reference_frame if self.manipulator_reference_frame else yolo_data
-        
-        # Calculate object center in current frame
+        # Calculate object center in image coordinates
         obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
         obj_center_y = yolo_data.bbox_y + (yolo_data.bbox_h / 2.0)
         
-        # Calculate reference center (manipulator origin)
-        ref_center_x = reference_frame.bbox_x + (reference_frame.bbox_w / 2.0)
-        ref_center_y = reference_frame.bbox_y + (reference_frame.bbox_h / 2.0)
+        # Normalize to [-1, 1] range where 0 is image center
+        norm_x = (obj_center_x - (self.image_width / 2.0)) / (self.image_width / 2.0)
+        norm_y = (obj_center_y - (self.image_height / 2.0)) / (self.image_height / 2.0)
         
-        # Calculate offset from reference frame
-        delta_x = obj_center_x - ref_center_x
+        # JOINT 1: Base rotation - map horizontal position
+        # Object on left -> rotate left (negative), object on right -> rotate right (positive)
+        joint1_target = norm_x * 0.7  # Scale to max ±0.7 radians (±40 degrees)
         
-        # Normalize horizontal offset (-1.0 to 1.0)
-        offset_x = delta_x / (reference_frame.bbox_w / 2.0) if reference_frame.bbox_w > 0 else 0.0
+        # JOINT 2: Shoulder angle - map vertical position
+        # Camera is mounted facing forward/down, objects lower in image are closer/lower
+        # Lower in image (positive norm_y) -> reach down more (more negative angle)
+        # Higher in image (negative norm_y) -> reach up more (less negative angle)
+        # Target range: -1.3 (reach down) to -0.5 (reach forward)
+        joint2_target = -1.0 + (norm_y * 0.8)  # Center at -1.0, adjust ±0.3
         
-        # Log reference frame usage
-        if self.manipulator_reference_frame:
-            self.get_logger().info(
-                f"Using reference frame: ref_center=({ref_center_x:.1f},{ref_center_y:.1f}), "
-                f"obj_center=({obj_center_x:.1f},{obj_center_y:.1f}), "
-                f"delta_x={delta_x:.1f}"
-            )
+        # JOINT 3: Elbow extension - based on object size (distance proxy)
+        # Smaller bbox -> farther away -> extend more
+        # Larger bbox -> closer -> extend less
+        bbox_width_ratio = yolo_data.bbox_w / self.image_width
+        # Map bbox size to extension: small object (0.1) -> extend more (1.2), large (0.4) -> extend less (0.6)
+        if bbox_width_ratio < 0.1:
+            bbox_width_ratio = 0.1
+        joint3_target = 1.4 - (bbox_width_ratio * 2.0)  # Inverse relationship
+        joint3_target = max(0.4, min(1.4, joint3_target))  # Clamp to safe range
         
-        # === BASE PICKING POSE (empirically determined, arm reaches down and forward to camera level) ===
-        # These values should work for objects at camera level in front of the robot
-        
-        # Joint1: Base rotation - adjust for horizontal position only
-        joint1_base = 0.0  # Straight ahead
-        joint1_target = joint1_base + (offset_x * 0.8)  # Moderate adjustment for object offset
-        joint1_target = max(-1.0, min(1.0, joint1_target))  # Clamp to safe range
-        
-        # Joint2: Shoulder pitch - FIXED aggressive downward angle to reach camera level
-        # This is the critical joint for reaching down from elevated arm base to camera level
-        joint2_target = -1.2  # Very negative = reaching down significantly
-        
-        # Joint3: Elbow pitch - FIXED forward extension
-        # This extends the arm forward to reach objects in camera view
-        joint3_target = 1.1  # Significant forward extension
-        
-        # Joint4: Wrist pitch - Compensate to keep gripper oriented correctly
-        # Should roughly equal -(joint2 + joint3) to keep gripper level
-        joint4_target = -(joint2_target + joint3_target) + 0.2  # Adds slight downward tilt
+        # JOINT 4: Wrist angle - compensate for shoulder angle to keep gripper level
+        # When shoulder pitches down, wrist should pitch up to maintain horizontal gripper
+        joint4_target = -joint2_target * 0.6  # Partial compensation
+        joint4_target = max(0.3, min(1.0, joint4_target))  # Clamp to safe range
         
         self.get_logger().info(
-            f"Arm positioning: offset_x={offset_x:.2f}"
-        )
-        self.get_logger().info(
-            f"  Fixed pose targets: j1={joint1_target:.3f}, j2={joint2_target:.3f}, "
-            f"j3={joint3_target:.3f}, j4={joint4_target:.3f}"
+            f"Arm positioning: obj_pos=({obj_center_x:.1f}, {obj_center_y:.1f}), "
+            f"norm=({norm_x:.2f}, {norm_y:.2f}), "
+            f"bbox_ratio={bbox_width_ratio:.2f}, "
+            f"joints=[{joint1_target:.2f}, {joint2_target:.2f}, {joint3_target:.2f}, {joint4_target:.2f}]"
         )
         
         return {
