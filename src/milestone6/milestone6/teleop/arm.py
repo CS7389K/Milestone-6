@@ -182,14 +182,17 @@ class TeleopArm(Node):
         bbox_ratio = yolo_data.bbox_w / self.image_width
         
         if bbox_ratio < 0.15:  # Far away
+            self.get_logger().info("Object far away")
             joint2_target = -0.6
             joint3_target = 0.3
             joint4_target = 0.9
         elif bbox_ratio < 0.3:  # Medium distance
+            self.get_logger().info("Object far medium distance")
             joint2_target = -0.7
             joint3_target = 0.4
             joint4_target = 1.0
         else:  # Close
+            self.get_logger().info("Object close")
             joint2_target = -0.8
             joint3_target = 0.5
             joint4_target = 1.0
