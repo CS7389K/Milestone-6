@@ -214,23 +214,27 @@ class TeleopArm(Node):
         # Scale conservatively to avoid over-rotation
         joint1_target = offset_x * 1.2  # Reduced from 1.5 for more precise control
         
-        # Joint2 (shoulder pitch): Vertical positioning in manipulator frame
-        # Base position around -0.5 to -0.9 (arm angled down for picking)
-        # Positive offset_y (object lower in frame) -> MORE negative (arm down more)
-        joint2_base = -0.65  # Adjusted base position
-        joint2_vertical_adjust = offset_y * 0.25  # Reduced sensitivity
+        # Joint2 (shoulder pitch): MUST reach DOWN significantly since arm is above camera
+        # Camera is mounted LOW, arm base is HIGH - need aggressive downward angle
+        # More negative = more downward
+        # Base position should be very negative to reach camera level
+        joint2_base = -1.3  # Very aggressive downward angle to reach camera level
+        joint2_vertical_adjust = offset_y * 0.3  # Adjust based on object position in frame
         joint2_target = joint2_base - joint2_vertical_adjust
+        # Clamp to safe limits
+        joint2_target = max(-1.57, min(-0.8, joint2_target))  # -90° to -45° roughly
         
-        # Joint3 (elbow pitch): Forward reach based on distance
-        # Use size_ratio: larger means closer (less extension), smaller means farther (more extension)
-        joint3_min = 0.15  # Minimum extension (very close)
-        joint3_max = 0.65  # Maximum extension (far)
+        # Joint3 (elbow pitch): MUST extend significantly to reach forward to camera level
+        # The arm needs to reach both DOWN and FORWARD from its elevated position
+        # Larger values = more extension
+        joint3_min = 0.8   # Significant extension even when close
+        joint3_max = 1.4   # Maximum safe extension
         
         # When size_ratio > 1: object is closer (larger than reference), need less extension
         # When size_ratio < 1: object is farther (smaller than reference), need more extension
         if size_ratio >= 1.0:
-            # Object is closer or same size - reduce extension
-            joint3_target = joint3_min + (1.0 - min(size_ratio - 1.0, 0.5)) * (joint3_max - joint3_min) * 0.3
+            # Object is closer or same size - reduce extension slightly
+            joint3_target = joint3_min + (1.0 - min(size_ratio - 1.0, 0.5)) * (joint3_max - joint3_min) * 0.4
         else:
             # Object is farther - increase extension
             joint3_target = joint3_min + (1.0 - size_ratio) * (joint3_max - joint3_min)
@@ -239,7 +243,8 @@ class TeleopArm(Node):
         
         # Joint4 (wrist pitch): Compensate to keep gripper level and angled down
         # Should roughly equal -(joint2 + joint3) to maintain orientation
-        joint4_target = -(joint2_target + joint3_target) + 0.15  # Slight downward angle
+        # But since joint2 and joint3 are both large, we need significant compensation
+        joint4_target = -(joint2_target + joint3_target) + 0.3  # Compensate with slight downward angle
         
         self.get_logger().info(
             f"Arm calc: size_ratio={size_ratio:.3f}, offset_x={offset_x:.2f}, offset_y={offset_y:.2f}"
@@ -334,13 +339,13 @@ class TeleopArm(Node):
                 self.teleop_pub.send_arm_trajectory(arm_positions)
                 time.sleep(2.0)
                 
-                # Extend to grasp
+                # Extend to grasp - reach down and forward more aggressively
                 self.get_logger().info("Approaching for grasp...")
                 grasp_positions = {
                     'joint1': arm_positions['joint1'],
-                    'joint2': arm_positions['joint2'] - 0.2,
-                    'joint3': arm_positions['joint3'] + 0.2,
-                    'joint4': arm_positions['joint4'] + 0.1
+                    'joint2': max(-1.57, arm_positions['joint2'] - 0.15),  # Reach down more, but stay safe
+                    'joint3': min(1.5, arm_positions['joint3'] + 0.2),     # Extend forward more
+                    'joint4': arm_positions['joint4'] + 0.2                # Adjust wrist to compensate
                 }
                 self.teleop_pub.send_arm_trajectory(grasp_positions)
                 time.sleep(2.0)
@@ -350,13 +355,13 @@ class TeleopArm(Node):
                 self.teleop_pub.gripper_close()
                 time.sleep(2.0)
                 
-                # Lift object
+                # Lift object - pull back up from camera level
                 self.get_logger().info("Lifting object...")
                 lift_positions = {
                     'joint1': arm_positions['joint1'],
-                    'joint2': -0.4,
-                    'joint3': 0.2,
-                    'joint4': 0.8
+                    'joint2': -0.5,   # Lift up from deep camera level position
+                    'joint3': 0.4,    # Retract elbow
+                    'joint4': 0.6     # Adjust wrist
                 }
                 self.teleop_pub.send_arm_trajectory(lift_positions)
                 time.sleep(2.0)
@@ -391,13 +396,13 @@ class TeleopArm(Node):
             try:
                 self.get_logger().info("RELEASING STATE: Executing release sequence...")
                 
-                # Lower arm slightly
+                # Lower arm slightly to place object
                 self.get_logger().info("Lowering arm...")
                 self.teleop_pub.send_arm_trajectory({
                     'joint1': 0.0,
-                    'joint2': -0.7,
-                    'joint3': 0.4,
-                    'joint4': 0.9
+                    'joint2': -0.8,   # Lower back down but not as far as camera level
+                    'joint3': 0.6,
+                    'joint4': 0.8
                 })
                 time.sleep(2.0)
                 
