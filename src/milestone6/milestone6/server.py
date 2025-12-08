@@ -39,6 +39,8 @@ class ML6Server(Node):
     """
     def __init__(self):
         super().__init__('m6_server')
+        self.declare_parameter('move_wheels', True)
+
         self.declare_parameter('image_width', 500)
         self.declare_parameter('image_height', 320)
         self.declare_parameter('yolo_model', 'yolo11n.pt')
@@ -48,6 +50,8 @@ class ML6Server(Node):
         self.declare_parameter('turn_speed', 1.5)
         self.declare_parameter('display', True)
         self.declare_parameter('track_class', 39)  # Default to "bottle"
+
+        self._move_wheels = self.get_parameter('move_wheels').value
 
         self._image_width = self.get_parameter('image_width').value
         self._image_height = self.get_parameter('image_height').value
@@ -64,9 +68,12 @@ class ML6Server(Node):
         self.get_logger().info(f"Tracking COCO class: '{class_name}' (ID: {self._track_class})")
 
         # Initialize teleop publisher (handles all movement commands)
-        self.get_logger().info("Starting Teleop Publisher...")
-        self.teleop = TeleopPublisher(self)
-        
+        if self._move_wheels:
+            self.get_logger().info("Starting Teleop Publisher...")
+            self.teleop = TeleopPublisher(self)
+        else:
+            self.get_logger().info("Teleop Publisher disabled by parameter 'move_wheels'.")
+
         # Initialize YOLO publisher (captures and processes camera frames)
         self.get_logger().info("Starting YOLO Publisher...")
         self.yolo_publisher = YOLOPublisher(
@@ -109,49 +116,50 @@ class ML6Server(Node):
         Args:
             data: YOLOData object containing detection information
         """
-        self.get_logger().debug(f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
+        if self._move_wheels:
+            self.get_logger().debug(f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
 
-        if data.clz != self._track_class:
-            self.get_logger().debug(f"Ignoring class {data.clz}, looking for {self._track_class}")
-            return
+            if data.clz != self._track_class:
+                self.get_logger().debug(f"Ignoring class {data.clz}, looking for {self._track_class}")
+                return
 
-        # Update detection timestamp
-        self._last_detection_time = self.get_clock().now()
-        self.get_logger().info(f"Detected target class {data.clz}! Processing movement...")
+            # Update detection timestamp
+            self._last_detection_time = self.get_clock().now()
+            self.get_logger().info(f"Detected target class {data.clz}! Processing movement...")
 
-        # Calculate bounding box center
-        bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
+            # Calculate bounding box center
+            bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
 
-        # Calculate image center
-        image_center_x = self._image_width / 2.0
+            # Calculate image center
+            image_center_x = self._image_width / 2.0
 
-        # Calculate horizontal offset from center
-        offset_x = bbox_center_x - image_center_x
+            # Calculate horizontal offset from center
+            offset_x = bbox_center_x - image_center_x
 
-        # Determine angular velocity (turn towards object)
-        # Positive offset (object on right) -> turn right (negative angular)
-        # Negative offset (object on left) -> turn left (positive angular)
-        if abs(offset_x) > self._tolerance:
-            # Normalize offset to [-1, 1] range
-            angular_ratio = -offset_x / (self._image_width / 2.0)
-            angular_ratio = max(-1.0, min(1.0, angular_ratio))  # clamp
-            angular_vel = angular_ratio * self._turn_speed
-            self.get_logger().info(f"Turning: offset={offset_x:.1f}px, angular_vel={angular_vel:.3f} rad/s")
-        else:
-            angular_vel = 0.0
-            self.get_logger().info("Object centered horizontally")
+            # Determine angular velocity (turn towards object)
+            # Positive offset (object on right) -> turn right (negative angular)
+            # Negative offset (object on left) -> turn left (positive angular)
+            if abs(offset_x) > self._tolerance:
+                # Normalize offset to [-1, 1] range
+                angular_ratio = -offset_x / (self._image_width / 2.0)
+                angular_ratio = max(-1.0, min(1.0, angular_ratio))  # clamp
+                angular_vel = angular_ratio * self._turn_speed
+                self.get_logger().info(f"Turning: offset={offset_x:.1f}px, angular_vel={angular_vel:.3f} rad/s")
+            else:
+                angular_vel = 0.0
+                self.get_logger().info("Object centered horizontally")
 
-        # Determine linear velocity (move forward if object is far)
-        if data.bbox_w < self._bbox_threshold:
-            linear_vel = self._forward_speed
-            self.get_logger().info(f"Moving forward: bbox_w={data.bbox_w:.1f}px")
-        else:
-            # Object is large (close), stop
-            linear_vel = 0.0
-            self.get_logger().info(f"Object is close, stopping: bbox_w={data.bbox_w:.1f}px")
-        
-        # Update teleop velocity command
-        self.teleop.set_velocity(linear_x=linear_vel, angular_z=angular_vel)
+            # Determine linear velocity (move forward if object is far)
+            if data.bbox_w < self._bbox_threshold:
+                linear_vel = self._forward_speed
+                self.get_logger().info(f"Moving forward: bbox_w={data.bbox_w:.1f}px")
+            else:
+                # Object is large (close), stop
+                linear_vel = 0.0
+                self.get_logger().info(f"Object is close, stopping: bbox_w={data.bbox_w:.1f}px")
+            
+            # Update teleop velocity command
+            self.teleop.set_velocity(linear_x=linear_vel, angular_z=angular_vel)
     
     def _check_target_lost(self):
         """Stop robot if target hasn't been detected recently."""
@@ -168,10 +176,11 @@ class ML6Server(Node):
     def shutdown(self):
         """Clean shutdown of the server."""
         self.get_logger().info("Shutting down ML6 Server...")
-        self.yolo_timer.cancel()
         self.check_timer.cancel()
+        self.yolo_timer.cancel()
         self.yolo_publisher.shutdown()
-        self.teleop.shutdown()
+        if self._move_wheels:
+            self.teleop.shutdown()
 
 
 def main(args=None):
