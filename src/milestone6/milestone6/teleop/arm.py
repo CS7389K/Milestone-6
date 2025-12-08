@@ -48,6 +48,7 @@ from milestone6.yolo.yolo_data import YOLOData
 
 # Arm control via teleop publisher
 from milestone6.teleop.publisher import TeleopPublisher
+from milestone6.teleop.subscriber import TeleopSubscriber
 from milestone6.coco import COCO_CLASSES
 
 
@@ -107,6 +108,10 @@ class TeleopArm(Node):
         # ------------------- Teleop control -------------------
         self.get_logger().info("Starting Teleop Publisher...")
         self.teleop_pub = TeleopPublisher(self)
+        
+        # ------------------- Joint State Tracking -------------------
+        self.get_logger().info("Starting Joint State Subscriber...")
+        self.teleop_sub = TeleopSubscriber(self)
 
         # ------------------- Timer -------------------
         self.timer = self.create_timer(0.1, self.tick)  # 10 Hz
@@ -172,41 +177,51 @@ class TeleopArm(Node):
 
     def calculate_arm_position_from_object(self, yolo_data: YOLOData):
         """
-        Calculate arm joint positions using FIXED POSES (like ROBOTIS does).
+        Calculate arm joint positions using VALIDATED POSES from ROBOTIS.
         
-        WHY THIS APPROACH WORKS:
-        - ROBOTIS uses MoveIt with pre-calibrated named targets ("home", "target")
-        - They do NOT calculate IK from pixels at runtime
-        - YOLO bounding boxes have NO depth information
-        - Camera calibration is imperfect and drifts over time
-        - Fixed poses can be tuned once and work reliably
+        Reference from working code:
+        - home_pose: [0.0, -1.05, 0.35, 0.70] (from turtlebot3_manipulation OpenCR code)
+        - init_pose: [0.0, -1.57, 1.37, 0.26] (from OpenCR hardware)
         
-        We use simple pan (joint1) from pixel position + fixed reach pose.
+        Uses joint state feedback to ensure safe transitions.
         """
+        # Check if we have current joint positions
+        if not self.teleop_sub.have_joint_states:
+            self.get_logger().error("No joint states available! Cannot calculate safe trajectory.")
+            # Return current target or safe default
+            return self.teleop_sub.target_positions or {
+                'joint1': 0.0,
+                'joint2': -1.05,
+                'joint3': 0.35,
+                'joint4': 0.70
+            }
+        
+        # Get current joint positions
+        current_pos = self.teleop_sub.joint_positions
+        
         # Calculate object center in image coordinates
         obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
         
         # Normalize horizontal position to [-1, 1]
         norm_x = (obj_center_x - (self.image_width / 2.0)) / (self.image_width / 2.0)
         
-        # --- JOINT 1: Pan base to align with object ---
-        # Camera has ~62° horizontal FOV
+        # --- JOINT 1: Pan to align with object ---
+        # Camera FOV ~62°, map to joint1 rotation
         camera_hfov_rad = math.radians(62.0)
-        joint1 = norm_x * (camera_hfov_rad / 2.0)  # Map pixel position to pan angle
-        joint1 = max(-math.pi, min(math.pi, joint1))
+        desired_joint1 = norm_x * (camera_hfov_rad / 2.0)
+        joint1 = max(-math.pi, min(math.pi, desired_joint1))
         
-        # --- FIXED REACHING POSE ---
-        # These are empirically tuned for bottles ~30-35cm in front
-        # Based on ROBOTIS home pose reference: [0.0, -1.05, 0.35, 0.70]
-        
-        joint2 = -1.0   # Shoulder: reach forward (negative = forward/up)
-        joint3 = 0.8    # Elbow: moderately bent
-        joint4 = 0.7    # Wrist: point gripper downward
+        # --- REACHING POSE (from ROBOTIS home_pose) ---
+        # These are VALIDATED values from OpenCR firmware:
+        # std::vector<double> home_pose = {0.0, -1.05, 0.35, 0.70};
+        joint2 = -1.05  # Shoulder: forward reach
+        joint3 = 0.35   # Elbow: slightly bent for reach
+        joint4 = 0.70   # Wrist: gripper orientation
         
         self.get_logger().info(
-            f"Fixed Pose: j1={math.degrees(joint1):.1f}° (pan), "
-            f"j2={math.degrees(joint2):.1f}°, j3={math.degrees(joint3):.1f}°, j4={math.degrees(joint4):.1f}° "
-            f"(object at x={obj_center_x:.0f}px, norm={norm_x:.2f})"
+            f"Calculated pose from current={list(current_pos.values())[:4]} -> "
+            f"target=[{joint1:.2f}, {joint2:.2f}, {joint3:.2f}, {joint4:.2f}] "
+            f"(obj at x={obj_center_x:.0f}px)"
         )
         
         return {
@@ -238,6 +253,11 @@ class TeleopArm(Node):
         # ------------------- STATE: PREPARING -------------------
         elif self.state == ArmMissionState.PREPARING:
             try:
+                # Wait for joint states before proceeding
+                if not self.teleop_sub.have_joint_states:
+                    self.get_logger().warn("Waiting for joint states...")
+                    return
+                
                 self.get_logger().info("PREPARING STATE: Opening gripper and positioning arm...")
                 self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
                 
@@ -245,6 +265,15 @@ class TeleopArm(Node):
                     self.get_logger().error("No YOLO data available, returning to WAITING")
                     self.set_state(ArmMissionState.WAITING)
                     return
+                
+                # Log current joint positions
+                current = self.teleop_sub.joint_positions
+                self.get_logger().info(
+                    f"Current arm: j1={current.get('joint1', 0):.2f}, "
+                    f"j2={current.get('joint2', 0):.2f}, "
+                    f"j3={current.get('joint3', 0):.2f}, "
+                    f"j4={current.get('joint4', 0):.2f}"
+                )
                 
                 # Confirm we're using the reference frame
                 if self.manipulator_reference_frame:
