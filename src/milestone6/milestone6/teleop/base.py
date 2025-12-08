@@ -104,7 +104,7 @@ class TeleopBase(Node):
 
             # Update detection timestamp
             self._last_detection_time = self.get_clock().now()
-            self.get_logger().info(f"Detected target class {data.clz}! Processing movement...")
+            self.get_logger().debug(f"Detected target class {data.clz}! Processing movement...")
 
             # Calculate bounding box center
             bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
@@ -123,19 +123,19 @@ class TeleopBase(Node):
                 angular_ratio = -offset_x / (self._image_width / 2.0)
                 angular_ratio = max(-1.0, min(1.0, angular_ratio))  # clamp
                 angular_vel = angular_ratio * self._turn_speed
-                self.get_logger().info(f"Turning: offset={offset_x:.1f}px, angular_vel={angular_vel:.3f} rad/s")
+                self.get_logger().debug(f"Turning: offset={offset_x:.1f}px, angular_vel={angular_vel:.3f} rad/s")
             else:
                 angular_vel = 0.0
-                self.get_logger().info("Object centered horizontally")
+                self.get_logger().debug("Object centered horizontally")
 
             # Determine linear velocity (move forward if object is far)
             if data.bbox_w < self._bbox_threshold:
                 linear_vel = self._forward_speed
-                self.get_logger().info(f"Moving forward: bbox_w={data.bbox_w:.1f}px")
+                self.get_logger().debug(f"Moving forward: bbox_w={data.bbox_w:.1f}px")
             else:
                 # Object is large (close), stop
                 linear_vel = 0.0
-                self.get_logger().info(f"Object is close, stopping: bbox_w={data.bbox_w:.1f}px")
+                self.get_logger().debug(f"Object is close, stopping: bbox_w={data.bbox_w:.1f}px")
             
             # Update teleop velocity command
             self.teleop.set_velocity(linear_x=linear_vel, angular_z=angular_vel)
@@ -149,12 +149,12 @@ class TeleopBase(Node):
         if time_since_detection > self._detection_timeout:
             # Target lost, stop the robot
             self.teleop.set_velocity(linear_x=0.0, angular_z=0.0)
-            self.get_logger().info(f"Target lost for {time_since_detection:.2f}s, stopping robot")
+            self.get_logger().debug(f"Target lost for {time_since_detection:.2f}s, stopping robot")
             self._last_detection_time = None  # Reset so we don't spam logs
     
     def shutdown(self):
         """Clean shutdown of the server."""
-        self.get_logger().info("Shutting down TeleopBase...")
+        self.get_logger().debug("Shutting down TeleopBase...")
         self.check_timer.cancel()
         if self._move_wheels:
             self.teleop.shutdown()

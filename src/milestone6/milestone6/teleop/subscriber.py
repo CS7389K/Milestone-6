@@ -49,7 +49,7 @@ class TeleopSubscriber:
             self.home = dict(self._js_pos)
             self._target_pos = dict(self._js_pos)
             self._have_js = True
-            self._node.get_logger().info('Joint states received; targets initialized.')
+            self._node.get_logger().debug('Joint states received; targets initialized.')
         
         # Invoke user callback if provided
         if self._callback and updated:

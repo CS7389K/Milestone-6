@@ -206,7 +206,7 @@ class ArmSequences:
 
     def grab(self):
         log = self.node.get_logger()
-        log.info("Arm grab sequence start (robust).")
+        log.debug("Arm grab sequence start (robust).")
 
         # 1) Open gripper
         self.gripper_open()
@@ -223,11 +223,11 @@ class ArmSequences:
         # 5) Lift
         self._arm(0.0, -0.4, 0.2, 0.8, sec=1.5)
 
-        log.info("Arm grab sequence done.")
+        log.debug("Arm grab sequence done.")
 
     def release(self):
         log = self.node.get_logger()
-        log.info("Arm release sequence start (robust).")
+        log.debug("Arm release sequence start (robust).")
 
         # 1) Lower slightly
         self._arm(0.0, -0.7, 0.4, 0.9, sec=1.5)
@@ -238,4 +238,4 @@ class ArmSequences:
         # 3) Retract
         self._arm(0.0, -0.3, 0.1, 0.6, sec=1.5)
 
-        log.info("Arm release sequence done.")
+        log.debug("Arm release sequence done.")

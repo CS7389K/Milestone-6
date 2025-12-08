@@ -60,16 +60,16 @@ class M6Client(Node):
         # Initialize YOLO subscriber to monitor detections from server
         if self.use_yolo:
             self.yolo_subscriber = YOLOSubscriber(self, callback=self._yolo_callback)
-            self.get_logger().info("YOLO subscriber initialized - monitoring detections")
+            self.get_logger().debug("YOLO subscriber initialized - monitoring detections")
         
         # Initialize teleop publisher for manual control
         if self.use_teleop:
             self.teleop_subscriber = TeleopSubscriber(self)
             self.teleop = TeleopPublisher(self, teleop_subscriber=self.teleop_subscriber)
-            self.get_logger().info("Teleop control initialized - manual control enabled")
+            self.get_logger().debug("Teleop control initialized - manual control enabled")
             self.get_logger().warn("Manual teleop will override autonomous behavior!")
         
-        self.get_logger().info("M6 Client node initialized")
+        self.get_logger().debug("M6 Client node initialized")
 
     def _yolo_callback(self, data: YOLOData):
         """
@@ -79,7 +79,7 @@ class M6Client(Node):
             data: YOLOData object containing detection information
         """
         self.latest_detection = data
-        self.get_logger().info(
+        self.get_logger().debug(
             f"[YOLO] Class: {data.clz}, "
             f"BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, "
             f"{data.bbox_w:.1f}x{data.bbox_h:.1f})"
@@ -107,13 +107,13 @@ class M6Client(Node):
             return
         
         self.teleop.set_velocity(linear_x=linear_x, angular_z=angular_z)
-        self.get_logger().info(f"Manual control: linear={linear_x:.3f}, angular={angular_z:.3f}")
+        self.get_logger().debug(f"Manual control: linear={linear_x:.3f}, angular={angular_z:.3f}")
 
     def stop_robot(self):
         """Stop the robot (set all velocities to zero)."""
         if self.use_teleop:
             self.teleop.stop()
-            self.get_logger().info("Robot stopped")
+            self.get_logger().debug("Robot stopped")
         else:
             self.get_logger().warn("Teleop not enabled")
 

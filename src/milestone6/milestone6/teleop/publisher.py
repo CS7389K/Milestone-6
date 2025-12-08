@@ -73,7 +73,7 @@ class TeleopPublisher:
         """Connect to MoveIt servo services."""
         for i in range(10):
             if self.servo_start_client.wait_for_service(timeout_sec=1.0):
-                self.get_logger().info('SUCCESS TO CONNECT SERVO START SERVER')
+                self.get_logger().debug('SUCCESS TO CONNECT SERVO START SERVER')
                 break
             self.get_logger().warn('WAIT TO CONNECT SERVO START SERVER')
             if i == 9:
@@ -83,7 +83,7 @@ class TeleopPublisher:
 
         for i in range(10):
             if self.servo_stop_client.wait_for_service(timeout_sec=1.0):
-                self.get_logger().info('SUCCESS TO CONNECT SERVO STOP SERVER')
+                self.get_logger().debug('SUCCESS TO CONNECT SERVO STOP SERVER')
                 break
             self.get_logger().warn('WAIT TO CONNECT SERVO STOP SERVER')
             if i == 9:
@@ -93,20 +93,20 @@ class TeleopPublisher:
 
     def start_moveit_servo(self):
         """Start MoveIt servo interface."""
-        self.get_logger().info("call 'moveit_servo' start srv.")
+        self.get_logger().debug("call 'moveit_servo' start srv.")
         if not self.servo_start_client.service_is_ready():
             self.get_logger().warn("start_servo service not ready; continuing without moveit_servo.")
             return
         future = self.servo_start_client.call_async(Trigger.Request())
         rclpy.spin_until_future_complete(self._node, future, timeout_sec=1.0)
         if future.done() and future.result():
-            self.get_logger().info("SUCCESS to start 'moveit_servo'")
+            self.get_logger().debug("SUCCESS to start 'moveit_servo'")
         else:
             self.get_logger().error("FAIL to start 'moveit_servo', executing without 'moveit_servo'")
 
     def stop_moveit_servo(self):
         """Shutdown MoveIt servo interface."""
-        self.get_logger().info("call 'moveit_servo' END srv.")
+        self.get_logger().debug("call 'moveit_servo' END srv.")
         if not self.servo_stop_client.service_is_ready():
             return
         future = self.servo_stop_client.call_async(Trigger.Request())
@@ -136,28 +136,28 @@ class TeleopPublisher:
         self.cmd_vel.linear.x = min(self.cmd_vel.linear.x + BASE_LINEAR_VEL_STEP, BASE_LINEAR_VEL_MAX)
         self.cmd_vel.linear.y = 0.0
         self.cmd_vel.linear.z = 0.0
-        self._node.get_logger().info(f'Linear velocity: {self.cmd_vel.linear.x:.3f}')
+        self._node.get_logger().debug(f'Linear velocity: {self.cmd_vel.linear.x:.3f}')
 
     def dec_linear(self):
         """Decrease linear velocity."""
         self.cmd_vel.linear.x = max(self.cmd_vel.linear.x - BASE_LINEAR_VEL_STEP, -BASE_LINEAR_VEL_MAX)
         self.cmd_vel.linear.y = 0.0
         self.cmd_vel.linear.z = 0.0
-        self._node.get_logger().info(f'Linear velocity: {self.cmd_vel.linear.x:.3f}')
+        self._node.get_logger().debug(f'Linear velocity: {self.cmd_vel.linear.x:.3f}')
 
     def inc_ang(self):
         """Increase angular velocity."""
         self.cmd_vel.angular.x = 0.0
         self.cmd_vel.angular.y = 0.0
         self.cmd_vel.angular.z = min(self.cmd_vel.angular.z + BASE_ANGULAR_VEL_STEP, BASE_ANGULAR_VEL_MAX)
-        self._node.get_logger().info(f'Angular velocity: {self.cmd_vel.angular.z:.3f}')
+        self._node.get_logger().debug(f'Angular velocity: {self.cmd_vel.angular.z:.3f}')
 
     def dec_ang(self):
         """Decrease angular velocity."""
         self.cmd_vel.angular.x = 0.0
         self.cmd_vel.angular.y = 0.0
         self.cmd_vel.angular.z = max(self.cmd_vel.angular.z - BASE_ANGULAR_VEL_STEP, -BASE_ANGULAR_VEL_MAX)
-        self._node.get_logger().info(f'Angular velocity: {self.cmd_vel.angular.z:.3f}')
+        self._node.get_logger().debug(f'Angular velocity: {self.cmd_vel.angular.z:.3f}')
 
     def stop(self):
         """Stop the base."""
@@ -217,7 +217,7 @@ class TeleopPublisher:
 
     def shutdown(self):
         """Shutdown the teleop publisher."""
-        self._node.get_logger().info('Shutting down teleop publisher...')
+        self._node.get_logger().debug('Shutting down teleop publisher...')
         self.stop()
         # self.stop_moveit_servo()  # Only needed if servo was started
         self.pub_timer.cancel()

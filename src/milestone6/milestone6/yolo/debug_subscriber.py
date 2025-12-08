@@ -28,8 +28,8 @@ class YOLODebugSubscriber(Node):
     def __init__(self):
         super().__init__('yolo_debug_subscriber')
         
-        self.get_logger().info("Starting YOLO Debug Subscriber...")
-        self.get_logger().info("Subscribing to 'yolo_topic'...")
+        self.get_logger().debug("Starting YOLO Debug Subscriber...")
+        self.get_logger().debug("Subscribing to 'yolo_topic'...")
         
         # Create YOLO subscriber
         self.yolo_subscriber = YOLOSubscriber(self, self._on_yolo_detection)
@@ -37,9 +37,9 @@ class YOLODebugSubscriber(Node):
         # Detection counter
         self.detection_count = 0
         
-        self.get_logger().info("YOLO Debug Subscriber ready!")
-        self.get_logger().info("Set log level to DEBUG to see detection details:")
-        self.get_logger().info("  ros2 run milestone6 yolo_debug_subscriber --ros-args --log-level DEBUG")
+        self.get_logger().debug("YOLO Debug Subscriber ready!")
+        self.get_logger().debug("Set log level to DEBUG to see detection details:")
+        self.get_logger().debug("  ros2 run milestone6 yolo_debug_subscriber --ros-args --log-level DEBUG")
     
     def _on_yolo_detection(self, data: YOLOData):
         """Callback for YOLO detections - logs detection details."""
@@ -63,7 +63,7 @@ class YOLODebugSubscriber(Node):
         
         # Also log at INFO level every 10 detections
         if self.detection_count % 10 == 0:
-            self.get_logger().info(
+            self.get_logger().debug(
                 f"Received {self.detection_count} detections. "
                 f"Latest: {class_name}"
             )

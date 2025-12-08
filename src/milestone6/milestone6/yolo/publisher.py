@@ -134,7 +134,7 @@ class YOLOPublisher(Node):
                         'clz': yolo_data.clz
                     })
                     self._publisher.publish(msg)
-                    self.get_logger().info(f"Detected class {cls}: bbox=({x1:.0f},{y1:.0f},{x2-x1:.0f}x{y2-y1:.0f})")
+                    self.get_logger().debug(f"Detected class {cls}: bbox=({x1:.0f},{y1:.0f},{x2-x1:.0f}x{y2-y1:.0f})")
         
         # Display frame with detections if enabled (always display, even without detections)
         if self._display:
