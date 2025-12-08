@@ -132,7 +132,7 @@ class TeleopArm(Node):
         self.get_logger().info(f"Received YOLO detection callback {str(data)}")
 
         # Filter by target class
-        if data.clz != self.target_class:
+        if data.clz not in [self.target_class, 41]:
             self.get_logger().info(f"Ignoring detection: class {data.clz} != target {self.target_class}")
             return
 
