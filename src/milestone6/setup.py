@@ -32,6 +32,7 @@ setup(
         'console_scripts': [
             f"base = {package_name}.teleop.base:main",
             f"arm = {package_name}.teleop.arm:main",
+            f"teleop_publisher = {package_name}.teleop.publisher:main",
             f"client = {package_name}.client:main",
             f"yolo_publisher = {package_name}.yolo.publisher:main",
             f"yolo_debug_subscriber = {package_name}.yolo.debug_subscriber:main",

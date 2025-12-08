@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Launch file for Milestone 6 Part 1: YOLO Publisher + TeleopBase
+Launch file for Milestone 6 Part 1: TeleopPublisher + YOLO Publisher + TeleopBase
 
 Launches:
+- TeleopPublisher Node: Centralized teleop service for base and arm control
 - YOLO Publisher Node: Captures camera frames and publishes object detections
 - TeleopBase Node: Subscribes to detections and controls robot base movement
 
@@ -27,7 +28,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Generate launch description with YOLO publisher and TeleopBase nodes."""
+    """Generate launch description with YOLO publisher, TeleopPublisher, and TeleopBase nodes."""
     # YOLO Publisher Node
     yolo_publisher_node = Node(
         package='milestone6',
@@ -40,6 +41,13 @@ def generate_launch_description():
             'image_height': 320,
             'display': True,
         }]
+    )
+    # Teleop Publisher Node
+    teleop_publisher_node = Node(
+        package='milestone6',
+        executable='teleop_publisher',
+        name='teleop_publisher',
+        output='screen',
     )
     # TeleopBase Node
     base_node = Node(
@@ -59,6 +67,7 @@ def generate_launch_description():
         }]
     )
     return LaunchDescription([
+        teleop_publisher_node,
         yolo_publisher_node,
         base_node,
     ])

@@ -260,3 +260,49 @@ class TeleopPublisher:
     def get_logger(self):
         """Get the node's logger."""
         return self._node.get_logger()
+
+
+from rclpy.node import Node
+
+
+class TeleopPublisherNode(Node):
+    """
+    Standalone TeleopPublisher Node.
+    
+    Publishes base velocity commands, arm trajectories, and gripper commands.
+    Can be used as a centralized teleop service for other nodes.
+    """
+    def __init__(self):
+        super().__init__('teleop_publisher')
+        self.get_logger().info("Starting TeleopPublisher Node...")
+        
+        # Initialize the publisher (using self as the node)
+        self.publisher = TeleopPublisher(self, teleop_subscriber=None)
+        
+        self.get_logger().info("TeleopPublisher Node ready.")
+    
+    def shutdown(self):
+        """Shutdown the node."""
+        self.get_logger().info('Shutting down TeleopPublisher Node...')
+        self.publisher.shutdown()
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = None
+    try:
+        node = TeleopPublisherNode()
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        print("\nShutting down TeleopPublisher Node...")
+    except Exception as e:
+        print(f"Error in TeleopPublisher Node: {e}")
+    finally:
+        if node:
+            node.shutdown()
+            node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
