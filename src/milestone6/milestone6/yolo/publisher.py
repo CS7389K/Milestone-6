@@ -18,6 +18,8 @@
 import time
 import json
 
+import rclpy
+from rclpy.node import Node
 from std_msgs.msg import String
 
 import cv2
@@ -26,7 +28,7 @@ from ultralytics import YOLO
 from .yolo_data import YOLOData
 
 
-class YOLOPublisher:
+class YOLOPublisher(Node):
     """
     Publishes the following information:
 
@@ -47,17 +49,27 @@ class YOLOPublisher:
 
     def __init__(
             self,
-            node,
-            yolo_model: str,
+            yolo_model: str = 'yolo11n.pt',
             image_width: int = 500,
             image_height: int = 320,
             display: bool = True,
         ):
-        self._node = node
-        self._display = display
+        super().__init__('yolo_publisher')
+        
+        # Declare parameters
+        self.declare_parameter('yolo_model', yolo_model)
+        self.declare_parameter('image_width', image_width)
+        self.declare_parameter('image_height', image_height)
+        self.declare_parameter('display', display)
+        
+        # Get parameters
+        yolo_model = self.get_parameter('yolo_model').value
+        image_width = self.get_parameter('image_width').value
+        image_height = self.get_parameter('image_height').value
+        self._display = self.get_parameter('display').value
         
         self.get_logger().info("Initializing YOLO Publisher Node...")
-        self._publisher = node.create_publisher(
+        self._publisher = self.create_publisher(
             String, 'yolo_topic', 10
         )
 
@@ -191,5 +203,25 @@ class YOLOPublisher:
         except Exception:
             pass  # Ignore errors during cleanup
 
-    def get_logger(self):
-        return self._node.get_logger()
+
+def main(args=None):
+    rclpy.init(args=args)
+    publisher = YOLOPublisher()
+        
+    try:
+        while rclpy.ok():
+            publisher.step()
+            rclpy.spin_once(publisher, timeout_sec=0.1)
+    except KeyboardInterrupt:
+        print("\nShutting down YOLO Publisher...")
+    except Exception as e:
+        print(f"Error in YOLO Publisher: {e}")
+    finally:
+        if publisher:
+            publisher.shutdown()
+            publisher.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

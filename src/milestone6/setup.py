@@ -1,4 +1,6 @@
 from setuptools import setup
+import os
+from glob import glob
 
 package_name = 'milestone6'
 
@@ -8,13 +10,13 @@ setup(
     packages=[
         package_name,
         f'{package_name}.teleop',
-        f'{package_name}.api',
         f'{package_name}.yolo',
     ],
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -30,6 +32,7 @@ setup(
             f"server = {package_name}.server:main",
             f"client = {package_name}.client:main",
             f"arm = {package_name}.teleop.arm:main",
+            f"yolo_publisher = {package_name}.yolo.publisher:main",
         ],
     },
 )
