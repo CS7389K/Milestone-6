@@ -192,7 +192,7 @@ class TeleopArm(Node):
         # Lower in image (positive norm_y) -> reach down more (more negative angle)
         # Higher in image (negative norm_y) -> reach up more (less negative angle)
         # Target range: -1.3 (reach down) to -0.5 (reach forward)
-        joint2_target = 1.0 + (norm_y * 0.8)  # Center at -1.0, adjust ±0.3
+        joint2_target = 1.0 + (norm_y * 0.5)  # Center at -1.0, adjust ±0.3
         
         # JOINT 3: Elbow extension - based on object size (distance proxy)
         # Smaller bbox -> farther away -> extend more
