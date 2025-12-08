@@ -94,9 +94,8 @@ class TeleopArm(Node):
         self.yolo_subscriber = YOLOSubscriber(self, self._yolo_callback)
 
         # ------------------- Teleop control -------------------
-        self.get_logger().info("Starting Teleop Subscriber and Publisher...")
-        self.teleop_sub = TeleopSubscriber(self)
-        self.teleop_pub = TeleopPublisher(self, self.teleop_sub)
+        self.get_logger().info("Starting Teleop Publisher...")
+        self.teleop_pub = TeleopPublisher(self)
 
         # ------------------- Timer -------------------
         self.timer = self.create_timer(0.1, self.tick)  # 10 Hz
