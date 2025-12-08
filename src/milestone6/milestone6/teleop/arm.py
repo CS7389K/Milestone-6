@@ -133,14 +133,15 @@ class TeleopArm(Node):
 
         # Filter by target class
         if data.clz != self.target_class:
+            self.get_logger().info(f"Ignoring detection: class {data.clz} != target {self.target_class}")
             return
 
         # Object detected!
         self.object_detected = True
         self.last_detection_time = self.get_clock().now()
         self.last_yolo_data = data
-        self.get_logger().debug(
-            f"Bottle detected: class {data.clz}, "
+        self.get_logger().info(
+            f"TARGET DETECTED! class {data.clz}, "
             f"bbox=({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}x{data.bbox_h:.1f})"
         )
 
@@ -159,7 +160,7 @@ class TeleopArm(Node):
 
     def is_detection_fresh(self):
         """Check if we've seen an object recently."""
-        self.get_logger().info("Checking if detection is fresh")
+        self.get_logger().debug("Checking if detection is fresh")
         if not self.object_detected or self.last_detection_time is None:
             return False
         
@@ -282,10 +283,16 @@ class TeleopArm(Node):
             # Wait for joint states to be available
             timeout = 5.0
             start = time.time()
+            self.get_logger().info(f"Waiting for joint states... (have_joint_states={self.teleop_sub.have_joint_states})")
             while not self.teleop_sub.have_joint_states:
-                if time.time() - start > timeout:
-                    raise RuntimeError("Timeout waiting for joint states")
+                elapsed = time.time() - start
+                if elapsed > timeout:
+                    raise RuntimeError(f"Timeout waiting for joint states after {elapsed:.1f}s")
+                if elapsed % 1.0 < 0.1:  # Log every second
+                    self.get_logger().warn(f"Still waiting for joint states... ({elapsed:.1f}s)")
                 time.sleep(0.1)
+            
+            self.get_logger().info("Joint states available! Proceeding with arm preparation...")
             
             # Open gripper first
             self.get_logger().info("Opening gripper...")
@@ -431,6 +438,7 @@ class TeleopArm(Node):
         # ------------------- STATE: PREPARING -------------------
         if self.state == ArmMissionState.PREPARING:
             if self.state_entered:
+                self.get_logger().info("PREPARING STATE: Starting arm preparation thread...")
                 self.state_entered = False
                 # Ensure base is stopped
                 self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
