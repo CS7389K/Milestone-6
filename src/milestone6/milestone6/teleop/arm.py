@@ -226,34 +226,34 @@ class TeleopArm(Node):
     # ------------------------------------------------------------------
     def _prepare_arm_thread(self):
         """Open gripper and position arm based on object detection."""
-        try:
-            self.get_logger().info("Preparing arm for grab sequence...")
-            
-            if self.last_yolo_data is None:
-                self.get_logger().error("No detection data available!")
-                self.arm_action_complete = True
-                self.arm_action_failed = True
-                return
-            
-            # Open gripper first
-            self.get_logger().info("Opening gripper...")
-            self.teleop_pub.gripper_open()
-            time.sleep(1.5)
-            
-            # Calculate arm position based on detected object
-            self.get_logger().info("Moving arm to track detected object...")
-            target_positions = self.calculate_arm_position_from_object(self.last_yolo_data)
-            self.get_logger().info(f"Target positions: {target_positions}")
-            self.teleop_pub.send_arm_trajectory(target_positions)
-            time.sleep(2.0)
-            
-            self.arm_action_complete = True
-            self.arm_action_failed = False
-            self.get_logger().info("Arm preparation complete!")
-        except Exception as e:
-            self.get_logger().error(f"Arm preparation failed: {e}")
+        # try:
+        self.get_logger().info("Preparing arm for grab sequence...")
+        
+        if self.last_yolo_data is None:
+            self.get_logger().error("No detection data available!")
             self.arm_action_complete = True
             self.arm_action_failed = True
+            return
+        
+        # Open gripper first
+        self.get_logger().info("Opening gripper...")
+        self.teleop_pub.gripper_open()
+        time.sleep(1.5)
+        
+        # Calculate arm position based on detected object
+        self.get_logger().info("Moving arm to track detected object...")
+        target_positions = self.calculate_arm_position_from_object(self.last_yolo_data)
+        self.get_logger().info(f"Target positions: {target_positions}")
+        self.teleop_pub.send_arm_trajectory(target_positions)
+        time.sleep(2.0)
+        
+        self.arm_action_complete = True
+        self.arm_action_failed = False
+        self.get_logger().info("Arm preparation complete!")
+        # except Exception as e:
+        #     self.get_logger().error(f"Arm preparation failed: {e}")
+        #     self.arm_action_complete = True
+        #     self.arm_action_failed = True
 
 
     def _grab_thread(self):
@@ -368,10 +368,8 @@ class TeleopArm(Node):
         # ------------------- STATE: WAITING -------------------
         if self.state == ArmMissionState.WAITING:
             # Stop any movement
-            self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
-            
-            # Check if we have a detection
             self.get_logger().info("Object detected! Preparing to grab...")
+            self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0) # Ensure base is stopped
             self.set_state(ArmMissionState.PREPARING)
             return
 
@@ -381,8 +379,7 @@ class TeleopArm(Node):
             if not self.arm_thread or not self.arm_thread.is_alive():
                 if not self.arm_action_complete:
                     self.get_logger().info("PREPARING STATE: Starting arm preparation thread...")
-                    # Ensure base is stopped
-                    self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
+                    self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0) # Ensure base is stopped
                     self.start_arm_action(self._prepare_arm_thread)
             
             # Wait for preparation to complete
