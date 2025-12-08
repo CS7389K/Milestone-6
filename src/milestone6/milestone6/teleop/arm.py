@@ -184,6 +184,7 @@ class TeleopArm(Node):
         offset_x = (obj_center_x - image_center_x) / image_center_x
         
         # Calculate vertical offset from image center (-1.0 to 1.0)
+        # Positive offset_y means object is LOWER in image (higher y coordinate)
         image_center_y = self.image_height / 2.0
         offset_y = (obj_center_y - image_center_y) / image_center_y
         
@@ -208,8 +209,10 @@ class TeleopArm(Node):
             joint3_target = 0.5
             joint4_target = 1.0
         
-        # Adjust joint2 based on vertical position (simple compensation)
-        joint2_target -= offset_y * 0.2
+        # Adjust joint2 based on vertical position
+        # Positive offset_y (object lower in image) -> more negative joint2 (arm down)
+        # Negative offset_y (object higher in image) -> less negative joint2 (arm up)
+        joint2_target += offset_y * 0.2
         
         return {
             'joint1': joint1_target,
