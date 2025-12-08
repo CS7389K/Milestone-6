@@ -259,6 +259,9 @@ class Part2Mission(Node):
             # If no detection, just idle
             if self.best_bbox is None:
                 self.stop_base()
+                if self.state_entered:
+                    self.get_logger().info("Waiting for YOLO detections on 'yolo_topic'...")
+                    self.state_entered = False
                 return
 
             aligned = self.publish_align()

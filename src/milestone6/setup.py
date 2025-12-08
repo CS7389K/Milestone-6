@@ -7,7 +7,9 @@ setup(
     version='0.0.0',
     packages=[
         package_name,
-        f'{package_name}.teleop'
+        f'{package_name}.teleop',
+        f'{package_name}.api',
+        f'{package_name}.yolo',
     ],
     data_files=[
         ('share/ament_index/resource_index/packages',
