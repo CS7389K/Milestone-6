@@ -24,6 +24,7 @@ setup(
         'console_scripts': [
             f"server = {package_name}.server:main",
             f"client = {package_name}.client:main",
+            f"arm = {package_name}.teleop.arm:main",
         ],
     },
 )
