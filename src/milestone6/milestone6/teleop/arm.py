@@ -104,6 +104,10 @@ class TeleopArm(Node):
         self.object_detected = False
         self.last_arm_command_time = None
         self.arm_command_interval = 0.5  # Only send arm commands every 0.5 seconds
+        
+        # Manipulator frame reference - store initial detection for coordinate frame
+        self.manipulator_reference_frame = None  # Store first detection as reference
+        self.using_reference_frame = False
 
         # State machine
         self.state = ArmMissionState.WAITING
@@ -132,6 +136,15 @@ class TeleopArm(Node):
             f"TARGET DETECTED! class {data.clz}, "
             f"bbox=({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}x{data.bbox_h:.1f})"
         )
+        
+        # Store first detection as manipulator reference frame
+        if self.manipulator_reference_frame is None:
+            self.manipulator_reference_frame = data
+            self.get_logger().info(
+                f"REFERENCE FRAME SET: Using detection at "
+                f"({data.bbox_x:.1f}, {data.bbox_y:.1f}) as manipulator coordinate origin"
+            )
+        
         self.object_detected = True
         self.last_detection_time = self.get_clock().now()
         self.last_yolo_data = data
@@ -147,8 +160,10 @@ class TeleopArm(Node):
     def calculate_arm_position_from_object(self, yolo_data: YOLOData):
         """
         Calculate arm joint positions based on object location in camera frame.
+        Uses the manipulator reference frame (first detection) as coordinate origin.
         
         Strategy:
+        - Uses the first detection as the manipulator's coordinate frame origin
         - joint1 (base rotation): Turn arm left/right to track horizontal object position
         - joint2 (shoulder pitch): Adjust up/down based on vertical object position
         - joint3 (elbow pitch): Adjust reach based on distance (bbox size)
@@ -160,50 +175,74 @@ class TeleopArm(Node):
         Returns:
             dict: Target joint positions
         """
-        # Calculate object center
+        # Use reference frame if available, otherwise use current detection as reference
+        reference_frame = self.manipulator_reference_frame if self.manipulator_reference_frame else yolo_data
+        
+        # Calculate object center in current frame
         obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
         obj_center_y = yolo_data.bbox_y + (yolo_data.bbox_h / 2.0)
         
-        # Calculate horizontal offset from image center (-1.0 to 1.0)
-        image_center_x = self.image_width / 2.0
-        offset_x = (obj_center_x - image_center_x) / image_center_x
+        # Calculate reference center (manipulator origin)
+        ref_center_x = reference_frame.bbox_x + (reference_frame.bbox_w / 2.0)
+        ref_center_y = reference_frame.bbox_y + (reference_frame.bbox_h / 2.0)
         
-        # Calculate vertical offset from image center (-1.0 to 1.0)
-        # Positive offset_y means object is LOWER in image (higher y coordinate)
-        image_center_y = self.image_height / 2.0
-        offset_y = (obj_center_y - image_center_y) / image_center_y
+        # Calculate offset from reference frame (manipulator coordinates)
+        # This gives us the object position relative to where we first saw it
+        delta_x = obj_center_x - ref_center_x
+        delta_y = obj_center_y - ref_center_y
         
-        # Calculate distance estimate from bbox size
-        bbox_ratio = yolo_data.bbox_w / self.image_width
+        # Normalize to manipulator frame (-1.0 to 1.0 range)
+        # Use reference frame size for normalization to maintain consistent scaling
+        offset_x = delta_x / (reference_frame.bbox_w / 2.0) if reference_frame.bbox_w > 0 else 0.0
+        offset_y = delta_y / (reference_frame.bbox_h / 2.0) if reference_frame.bbox_h > 0 else 0.0
         
-        # Joint1: Horizontal rotation (yaw) to center object
-        # Positive offset (right) -> rotate right (positive angle)
-        joint1_target = offset_x * 1.5  # Scale to reasonable angle range
+        # Calculate distance estimate from bbox size change
+        # Larger bbox (closer) means less reach needed
+        # Compare current size to reference size
+        size_ratio = yolo_data.bbox_w / reference_frame.bbox_w if reference_frame.bbox_w > 0 else 1.0
         
-        # Joint2 (shoulder pitch): Vertical positioning
+        # Log reference frame usage
+        if self.manipulator_reference_frame:
+            self.get_logger().info(
+                f"Using reference frame: ref_center=({ref_center_x:.1f},{ref_center_y:.1f}), "
+                f"obj_center=({obj_center_x:.1f},{obj_center_y:.1f}), "
+                f"delta=({delta_x:.1f},{delta_y:.1f})"
+            )
+        
+        # Joint1: Horizontal rotation (yaw) to center object in manipulator frame
+        # Positive offset (right in camera) -> rotate right (positive angle)
+        # Scale conservatively to avoid over-rotation
+        joint1_target = offset_x * 1.2  # Reduced from 1.5 for more precise control
+        
+        # Joint2 (shoulder pitch): Vertical positioning in manipulator frame
         # Base position around -0.5 to -0.9 (arm angled down for picking)
-        # Positive offset_y (object lower) -> MORE negative (arm down more)
-        # Negative offset_y (object higher) -> LESS negative (arm up more)
-        joint2_base = -0.7  # Base downward angle
-        joint2_vertical_adjust = offset_y * 0.3  # Adjust based on vertical position
+        # Positive offset_y (object lower in frame) -> MORE negative (arm down more)
+        joint2_base = -0.65  # Adjusted base position
+        joint2_vertical_adjust = offset_y * 0.25  # Reduced sensitivity
         joint2_target = joint2_base - joint2_vertical_adjust
         
         # Joint3 (elbow pitch): Forward reach based on distance
-        # Larger bbox (closer) -> less extension
-        # Smaller bbox (farther) -> more extension
-        # Range typically 0.2 to 0.6 radians
-        joint3_min = 0.2  # Minimum extension (close)
-        joint3_max = 0.6  # Maximum extension (far)
-        # Invert bbox_ratio so smaller bbox = larger extension
-        joint3_target = joint3_max - (bbox_ratio * (joint3_max - joint3_min) / 0.5)
+        # Use size_ratio: larger means closer (less extension), smaller means farther (more extension)
+        joint3_min = 0.15  # Minimum extension (very close)
+        joint3_max = 0.65  # Maximum extension (far)
+        
+        # When size_ratio > 1: object is closer (larger than reference), need less extension
+        # When size_ratio < 1: object is farther (smaller than reference), need more extension
+        if size_ratio >= 1.0:
+            # Object is closer or same size - reduce extension
+            joint3_target = joint3_min + (1.0 - min(size_ratio - 1.0, 0.5)) * (joint3_max - joint3_min) * 0.3
+        else:
+            # Object is farther - increase extension
+            joint3_target = joint3_min + (1.0 - size_ratio) * (joint3_max - joint3_min)
+        
         joint3_target = max(joint3_min, min(joint3_max, joint3_target))  # Clamp
         
-        # Joint4 (wrist pitch): Compensate to keep gripper level
+        # Joint4 (wrist pitch): Compensate to keep gripper level and angled down
         # Should roughly equal -(joint2 + joint3) to maintain orientation
-        joint4_target = -(joint2_target + joint3_target) + 0.2  # Small offset for slight downward angle
+        joint4_target = -(joint2_target + joint3_target) + 0.15  # Slight downward angle
         
         self.get_logger().info(
-            f"Arm calc: bbox_ratio={bbox_ratio:.3f}, offset_x={offset_x:.2f}, offset_y={offset_y:.2f}"
+            f"Arm calc: size_ratio={size_ratio:.3f}, offset_x={offset_x:.2f}, offset_y={offset_y:.2f}"
         )
         self.get_logger().info(
             f"  Targets: j1={joint1_target:.3f}, j2={joint2_target:.3f}, "
@@ -247,6 +286,13 @@ class TeleopArm(Node):
                     self.set_state(ArmMissionState.WAITING)
                     return
                 
+                # Confirm we're using the reference frame
+                if self.manipulator_reference_frame:
+                    self.using_reference_frame = True
+                    self.get_logger().info(
+                        f"Using manipulator reference frame from class {self.manipulator_reference_frame.clz}"
+                    )
+                
                 # Open gripper
                 self.get_logger().info("Opening gripper...")
                 self.teleop_pub.gripper_open()
@@ -264,6 +310,8 @@ class TeleopArm(Node):
             except Exception as e:  # noqa: B902
                 self.get_logger().error(f"Preparation failed: {e}")
                 self.object_detected = False
+                self.manipulator_reference_frame = None  # Clear reference frame on error
+                self.using_reference_frame = False
                 self.set_state(ArmMissionState.WAITING)
             return
 
@@ -318,6 +366,8 @@ class TeleopArm(Node):
             except Exception as e:  # noqa: B902
                 self.get_logger().error(f"Grab failed: {e}")
                 self.object_detected = False
+                self.manipulator_reference_frame = None  # Clear reference frame on error
+                self.using_reference_frame = False
                 self.set_state(ArmMissionState.WAITING)
             return
 
@@ -379,6 +429,8 @@ class TeleopArm(Node):
             self.object_detected = False
             self.last_yolo_data = None
             self.last_detection_time = None
+            self.manipulator_reference_frame = None  # Reset reference frame for next object
+            self.using_reference_frame = False
             self.set_state(ArmMissionState.WAITING)
             return
 
