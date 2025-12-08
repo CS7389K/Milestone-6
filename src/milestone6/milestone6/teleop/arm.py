@@ -14,7 +14,6 @@ Architecture:
 
 States:
     WAITING    -> Waiting for object detection
-    APPROACHING -> Moving base towards object while tracking with arm
     PREPARING  -> Object in range, preparing arm for grab
     GRABBING   -> Executing grab sequence
     HOLDING    -> Holding the grabbed object for 2 seconds
@@ -56,7 +55,6 @@ from milestone6.coco import COCO_CLASSES
 class ArmMissionState(Enum):
     """States for coordinated base and arm grabbing mission."""
     WAITING = 1           # Waiting for object detection
-    APPROACHING = 2       # Moving base towards object, tracking with arm
     PREPARING = 3         # Object in range, preparing arm for grab
     GRABBING = 4          # Executing grab sequence
     HOLDING = 5           # Object grabbed, holding
@@ -107,6 +105,8 @@ class TeleopArm(Node):
         self.last_detection_time = None
         self.last_yolo_data = None
         self.object_detected = False
+        self.last_arm_command_time = None
+        self.arm_command_interval = 0.5  # Only send arm commands every 0.5 seconds
 
         # State machine
         self.state = ArmMissionState.WAITING
@@ -424,35 +424,7 @@ class TeleopArm(Node):
             
             # Check if we have a fresh detection
             if self.is_detection_fresh():
-                self.get_logger().info("Object detected! Approaching...")
-                self.set_state(ArmMissionState.APPROACHING)
-            return
-
-        # ------------------- STATE: APPROACHING -------------------
-        if self.state == ArmMissionState.APPROACHING:
-            if self.state_entered:
-                self.get_logger().info("Approaching object with coordinated base and arm control...")
-                self.state_entered = False
-            
-            # Check if detection is still fresh
-            if not self.is_detection_fresh() or self.last_yolo_data is None:
-                self.get_logger().warn("Lost object detection, returning to WAITING")
-                self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
-                self.object_detected = False
-                self.set_state(ArmMissionState.WAITING)
-                return
-            
-            # Update arm position to track object
-            arm_positions = self.calculate_arm_position_from_object(self.last_yolo_data)
-            self.teleop_pub.send_arm_trajectory(arm_positions)
-            
-            # Control base to approach object
-            is_close_enough = self.control_base_towards_object(self.last_yolo_data)
-            
-            # If object is close enough, prepare for grab
-            if is_close_enough:
-                self.get_logger().info("Object in range! Preparing for grab...")
-                self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
+                self.get_logger().info("Object detected! Preparing to grab...")
                 self.set_state(ArmMissionState.PREPARING)
             return
 
