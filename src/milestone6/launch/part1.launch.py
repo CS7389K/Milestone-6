@@ -64,8 +64,11 @@ def generate_launch_description():
             'forward_speed': 0.15,
             'turn_speed': 1.5,
             'track_class': 39,  # bottle
+    
+    
         }]
     )
+
     return LaunchDescription([
         teleop_publisher_node,
         yolo_publisher_node,
