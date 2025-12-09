@@ -24,9 +24,9 @@ Milestone 6 integrates multiple ROS2 subsystems to create a comprehensive roboti
 
 - **Teleoperation** ([Milestone 3](https://github.com/CS7389K/Milestone-3)): Command-line interface for robot control
 - **Computer Vision** ([Milestone 4](https://github.com/CS7389K/Milestone-4)): YOLO-based object detection
-- **AI Interaction** ([Milestone 5](https://github.com/CS7389K/Milestone-5)): LLaMA integration for natural language processing
+- **LLM Interaction** ([Milestone 5](https://github.com/CS7389K/Milestone-5)): LLaMA integration for natural language processing
 
-The system is designed to run across multiple devices: a remote PC, Turtlebot Jetson, and Secondary Jetson.
+The system is designed to run across multiple devices: a remote PC and a Turtlebot Jetson
 
 ## Prerequisites
 
@@ -40,20 +40,28 @@ The system is designed to run across multiple devices: a remote PC, Turtlebot Je
 
 ## Running
 
-### Terminal 1: Launch the TurtleBot3 base (creates /cmd_vel topic)
-```sh
-ros2 launch turtlebot3_bringup robot.launch.py
-```
-
-### Terminal 2: Launch the OpenManipulator arm
+### Terminal 1: Launch the TurtleBot3 OpenManipulator arm
 ```sh
 ros2 launch turtlebot3_manipulation_bringup hardware.launch.py
 ```
 
-### Terminal 3: Launch server.py
+### Terminal 2: Launch a configuration
 
 ```sh
-ros2 launch milestone6 server
+# Launches:
+# - TeleopPublisher Node: Centralized teleop service for base and arm control
+# - YOLO Publisher Node: Captures camera frames and publishes object detections
+# - TeleopBase Node: Subscribes to detections and controls robot base movement
+ros2 launch milestone6 part1.launch.py
+```
+
+```sh
+# Launches:
+# - TeleopPublisher Node: Centralized teleop service for base and arm control
+# - YOLO Publisher Node: Captures camera frames and publishes object detections
+# - TeleopBase Node: Subscribes to detections and controls robot base movement
+# - TeleopArm Node: Automatically grabs detected objects
+ros2 launch milestone6 part2.launch.py
 ```
 
 ## Installation
