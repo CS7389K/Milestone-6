@@ -36,6 +36,8 @@ setup(
             f"client = {package_name}.client:main",
             f"yolo_publisher = {package_name}.yolo.publisher:main",
             f"yolo_debug_subscriber = {package_name}.yolo.debug_subscriber:main",
+            f"arm1 = {package_name}.teleop.arm1:main",
+            f"arm2 = {package_name}.teleop.arm2:main",
         ],
     },
 )
