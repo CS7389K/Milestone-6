@@ -38,32 +38,6 @@ The system is designed to run across multiple devices: a remote PC and a Turtleb
   - Turtlebot with a Jetson
   - Secondary Jetson (optional)
 
-## Running
-
-### Terminal 1: Launch the TurtleBot3 OpenManipulator arm
-```sh
-ros2 launch turtlebot3_manipulation_bringup hardware.launch.py
-```
-
-### Terminal 2: Launch a configuration
-
-```sh
-# Launches:
-# - TeleopPublisher Node: Centralized teleop service for base and arm control
-# - YOLO Publisher Node: Captures camera frames and publishes object detections
-# - TeleopBase Node: Subscribes to detections and controls robot base movement
-ros2 launch milestone6 part1.launch.py
-```
-
-```sh
-# Launches:
-# - TeleopPublisher Node: Centralized teleop service for base and arm control
-# - YOLO Publisher Node: Captures camera frames and publishes object detections
-# - TeleopBase Node: Subscribes to detections and controls robot base movement
-# - TeleopArm Node: Automatically grabs detected objects
-ros2 launch milestone6 part2.launch.py
-```
-
 ## Installation
 
 ### 1. Clone the Repository
@@ -111,20 +85,33 @@ source install/setup.bash
 After building the project, source the workspace in each terminal session:
 
 ```bash
-source install/setup.bash
+source install/setup.sh
 ```
 
-### Running the Server
-
-```bash
-ros2 run milestone6 server
+### Terminal 1: Launch the TurtleBot3 OpenManipulator arm
+```sh
+ros2 launch turtlebot3_manipulation_bringup hardware.launch.py
 ```
 
-### Running the Client
+### Terminal 2: Launch a configuration
 
-```bash
-ros2 run milestone6 client
+```sh
+# Launches:
+# - TeleopPublisher Node: Centralized teleop service for base and arm control
+# - YOLO Publisher Node: Captures camera frames and publishes object detections
+# - TeleopBase Node: Subscribes to detections and controls robot base movement
+ros2 launch milestone6 part1.launch.py
 ```
+
+```sh
+# Launches:
+# - TeleopPublisher Node: Centralized teleop service for base and arm control
+# - YOLO Publisher Node: Captures camera frames and publishes object detections
+# - TeleopBase Node: Subscribes to detections and controls robot base movement
+# - TeleopArm Node: Automatically grabs detected objects
+ros2 launch milestone6 part2.launch.py
+```
+
 ## Resources
 
 ### ROS2 Foxy Documentation
