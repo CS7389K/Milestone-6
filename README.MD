@@ -11,7 +11,6 @@
 
 - [Overview](#overview)
 - [Prerequisites](#prerequisites)
-- [Running](#running)
 - [Installation](#installation)
 - [Building](#building)
 - [Usage](#usage)
