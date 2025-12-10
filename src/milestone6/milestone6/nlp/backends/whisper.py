@@ -11,7 +11,7 @@ class WhisperBackend():
     ):
         # Initialize Whisper model
         self.model = whisper.load_model(
-            model_type, 
+            model_type,
             device=device,
             in_memory=True,
         )
