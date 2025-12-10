@@ -460,36 +460,36 @@ class Part2(Node):
             self._execute_grab_sequence()
 
         # ==================== TRANSPORTING ====================
-        # if self.state == State.TRANSPORTING:
-        #     if self.transport_start_time is None:
-        #         # Calculate how long to move forward
-        #         self.transport_duration = self.transport_distance / self.forward_speed
-        #         self.transport_start_time = self.get_clock().now()
+        if self.state == State.TRANSPORTING:
+            if self.transport_start_time is None:
+                # Calculate how long to move forward
+                self.transport_duration = self.transport_distance / self.forward_speed
+                self.transport_start_time = self.get_clock().now()
 
-        #         self.get_logger().info(f"\n{'=' * 70}")
-        #         self.get_logger().info(f"[TRANSPORTING] Moving forward {self.transport_distance}m "
-        #                                f"(~{self.transport_duration:.1f}s)")
-        #         self.get_logger().info(f"{'=' * 70}")
+                self.get_logger().info(f"\n{'=' * 70}")
+                self.get_logger().info(f"[TRANSPORTING] Moving forward {self.transport_distance}m "
+                                       f"(~{self.transport_duration:.1f}s)")
+                self.get_logger().info(f"{'=' * 70}")
 
-        #         # Start moving forward
-        #         self.teleop_pub.set_velocity(
-        #             linear_x=self.forward_speed, angular_z=0.0)
-        #     else:
-        #         # Check if we've moved far enough
-        #         elapsed = (self.get_clock().now() -
-        #                    self.transport_start_time).nanoseconds / 1e9
+                # Start moving forward
+                self.teleop_pub.set_velocity(
+                    linear_x=self.forward_speed, angular_z=0.0)
+            else:
+                # Check if we've moved far enough
+                elapsed = (self.get_clock().now() -
+                           self.transport_start_time).nanoseconds / 1e9
 
-        #         if elapsed >= self.transport_duration:
-        #             self.stop_base()
-        #             self.get_logger().info(f"[TRANSPORTING] Traveled {self.transport_distance}m! "
-        #                                    f"Starting RELEASING sequence...")
-        #             self.release_step = 0
-        #             self.state = State.RELEASING
-        #         else:
-        #             remaining = self.transport_duration - elapsed
-        #             if int(remaining) != int(remaining + 0.1):  # Log every second
-        #                 self.get_logger().info(
-        #                     f"Transporting... {remaining:.0f}s remaining")
+                if elapsed >= self.transport_duration:
+                    self.stop_base()
+                    self.get_logger().info(f"[TRANSPORTING] Traveled {self.transport_distance}m! "
+                                           f"Starting RELEASING sequence...")
+                    self.release_step = 0
+                    self.state = State.RELEASING
+                else:
+                    remaining = self.transport_duration - elapsed
+                    if int(remaining) != int(remaining + 0.1):  # Log every second
+                        self.get_logger().info(
+                            f"Transporting... {remaining:.0f}s remaining")
 
         # ==================== RELEASING ====================
         if self.state == State.RELEASING:

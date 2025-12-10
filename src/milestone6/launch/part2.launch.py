@@ -64,7 +64,7 @@ def generate_launch_description():
     # Declare launch arguments
     include_hardware_arg = DeclareLaunchArgument(
         'include_hardware',
-        default_value='false',
+        default_value='true',
         description='Include hardware.launch.py (only use when running on TurtleBot itself)'
     )
 
@@ -106,13 +106,13 @@ def generate_launch_description():
 
     target_bbox_width_arg = DeclareLaunchArgument(
         'target_bbox_width',
-        default_value='325',
+        default_value='360',
         description='Ideal bounding box width for grabbing in pixels'
     )
 
     forward_speed_arg = DeclareLaunchArgument(
         'forward_speed',
-        default_value='0.15',
+        default_value='0.1',
         description='Linear velocity in m/s'
     )
 
@@ -124,7 +124,7 @@ def generate_launch_description():
 
     transport_distance_arg = DeclareLaunchArgument(
         'transport_distance',
-        default_value='0.25',
+        default_value='0.10',
         description='Distance to transport object in meters (3.2ft = 0.975m)'
     )
 
@@ -136,11 +136,11 @@ def generate_launch_description():
 
     # Arm joint position arguments
     grab_joint2_arg = DeclareLaunchArgument(
-        'grab_joint2', default_value='0.5',
+        'grab_joint2', default_value='0.9',
         description='Grab position: forward reach (radians)'
     )
     grab_joint3_arg = DeclareLaunchArgument(
-        'grab_joint3', default_value='-0.3',
+        'grab_joint3', default_value='-0.6',
         description='Grab position: extend elbow (radians)'
     )
     grab_joint4_arg = DeclareLaunchArgument(
