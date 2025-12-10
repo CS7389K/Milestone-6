@@ -57,7 +57,7 @@ def generate_launch_description():
 
     display_arg = DeclareLaunchArgument(
         'display',
-        default_value='false',
+        default_value='true',
         description='Display YOLO detection window (usually false on headless TurtleBot)'
     )
 
