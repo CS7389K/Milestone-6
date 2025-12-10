@@ -89,11 +89,25 @@ try:
     print(f"✓ Inference completed in {(t2-t1)*1000:.1f}ms")
     print(f"✓ Output tensors: {list(results.keys())}")
     for name, tensor in results.items():
-        print(f"  {name}: shape {tensor.shape}, dtype {tensor.dtype}")
+        if isinstance(tensor, np.ndarray):
+            print(f"  {name}: shape {tensor.shape}, dtype {tensor.dtype}")
+        else:
+            print(f"  {name}: type {type(tensor)}, value: {tensor}")
+    
+    print(f"\n✓ Inference time per frame: {(t2-t1)*1000/expected_batch:.1f}ms")
+    print(f"✓ Theoretical FPS: {expected_batch/(t2-t1):.1f} (batched)")
+    print(f"✓ Single frame FPS estimate: {1/((t2-t1)/expected_batch):.1f}")
     
     # Cleanup
     vdevice.release()
-    print("\n✓ All tests passed! Hailo is ready to use.")
+    
+    print("\n" + "="*50)
+    print("IMPORTANT: This HEF expects batch size of 640!")
+    print("For real-time single-frame inference, you need to:")
+    print("  1. Recompile HEF with batch_size=1")
+    print("  2. Or send 640 frames at once (not practical)")
+    print("="*50)
+    print("\n✓ Hailo hardware works, but HEF needs recompilation.")
     
 except Exception as e:
     print(f"\n✗ Error: {e}")
