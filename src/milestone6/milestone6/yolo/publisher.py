@@ -119,17 +119,17 @@ class YOLOPublisher(Node):
 
     def step(self):
         # Check if camera is still open
-        if not self._capture.isOpened():
+        if not self._camera.isOpened():
             self.get_logger().error("Camera is not open!")
             return
 
-        ok, frame = self._capture.read()
+        ok, frame = self._camera.read()
         if not ok:
             self.get_logger().warn("Failed to read frame from camera")
             return
 
         start_time = time.time()
-        results = self.model(frame)
+        results = self._model(frame)
         end_time = time.time()
 
         # Extract and publish detection data
@@ -181,8 +181,8 @@ class YOLOPublisher(Node):
                 cls = int(box.cls[0].cpu().numpy())
 
                 # Get class name
-                class_name = self.model.names[cls] if cls < len(
-                    self.model.names) else f"Class {cls}"
+                class_name = self._model.names[cls] if cls < len(
+                    self._model.names) else f"Class {cls}"
 
                 # Draw bounding box
                 cv2.rectangle(display_frame, (x1, y1),
@@ -215,8 +215,8 @@ class YOLOPublisher(Node):
         self.get_logger().info("Shutting down YOLO Publisher...")
 
         # Release camera capture
-        if self._capture is not None and self._capture.isOpened():
-            self._capture.release()
+        if self._camera is not None and self._camera.isOpened():
+            self._camera.release()
             self.get_logger().info("Camera released")
             time.sleep(0.5)
 
@@ -228,9 +228,9 @@ class YOLOPublisher(Node):
     def __del__(self):
         """Destructor to ensure cleanup happens even if shutdown() isn't called."""
         try:
-            if hasattr(self, '_capture') and self._capture is not None:
-                if self._capture.isOpened():
-                    self._capture.release()
+            if hasattr(self, '_camera') and self._camera is not None:
+                if self._camera.isOpened():
+                    self._camera.release()
             if hasattr(self, '_display') and self._display:
                 cv2.destroyAllWindows()
         except Exception:
