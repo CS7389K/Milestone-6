@@ -106,8 +106,8 @@ class YOLOPublisher(Node):
         # Warm up model with a dummy inference for faster first detection
         import numpy as np
         dummy_frame = np.zeros((self._target_height, self._target_width, 3), dtype=np.uint8)
-        self.get_logger().info("Warming up YOLO model...")
-        _ = self.model(dummy_frame, verbose=False, device='cuda:0' if cv2.cuda.getCudaEnabledDeviceCount() > 0 else 'cpu')
+        self.get_logger().info("Warming up YOLO model on CPU...")
+        _ = self.model(dummy_frame, verbose=False, device='cpu')
         self.get_logger().info("YOLO model ready!")
         
         if self._display:
@@ -140,12 +140,11 @@ class YOLOPublisher(Node):
         frame_final = cv2.resize(frame_cropped, (self._target_width, self._target_height))
             
         start_time = time.time()
-        # Optimize inference: conf threshold, verbose off, half precision on GPU
+        # Run inference with verbose off for speed
         results = self.model(
             frame_final,
-            conf=0.25,  # Only detect objects with >25% confidence
             verbose=False,  # Disable logging for speed
-            device='cuda:0' if cv2.cuda.getCudaEnabledDeviceCount() > 0 else 'cpu'
+            device='cpu'  # Force CPU (more stable than trying CUDA detection)
         )
         end_time = time.time()
 
