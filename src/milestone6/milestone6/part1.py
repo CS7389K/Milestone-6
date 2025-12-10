@@ -62,9 +62,14 @@ class TeleopBase(Node):
         self.turn_speed = self.get_parameter('turn_speed').value
         self.detection_timeout = self.get_parameter('detection_timeout').value
 
-        # Parse tracking classes from comma-separated string
-        self.tracking_classes = [
-            int(c.strip()) for c in tracking_classes.split(',') if c.strip()]
+        # Parse tracking classes from comma-separated string or single integer
+        if isinstance(tracking_classes, str):
+            self.tracking_classes = [
+                int(c.strip()) for c in tracking_classes.split(',') if c.strip()]
+        else:
+            # Handle case where parameter is already an integer
+            self.tracking_classes = [int(tracking_classes)]
+
 
         # Get class names from COCO dataset
         class_names = [COCO_CLASSES.get(cls, f'unknown({cls})') \

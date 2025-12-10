@@ -87,7 +87,7 @@ class Part2(Node):
         self.declare_parameter('detection_timeout', 0.5)  # seconds
         self.declare_parameter('transport_distance', 1.0)  # meters
 
-        tracking_classes_str = self.get_parameter('tracking_classes').value
+        tracking_classes = self.get_parameter('tracking_classes').value
         self.image_width = self.get_parameter('image_width').value
         self.image_height = self.get_parameter('image_height').value
         self.bbox_tolerance = self.get_parameter('bbox_tolerance').value
@@ -99,9 +99,13 @@ class Part2(Node):
         self.transport_distance = self.get_parameter(
             'transport_distance').value
 
-        # Parse tracking classes from comma-separated string
-        self.tracking_classes = [
-            int(c.strip()) for c in tracking_classes_str.split(',') if c.strip()]
+        # Parse tracking classes from comma-separated string or single integer
+        if isinstance(tracking_classes, str):
+            self.tracking_classes = [
+                int(c.strip()) for c in tracking_classes.split(',') if c.strip()]
+        else:
+            # Handle case where parameter is already an integer
+            self.tracking_classes = [int(tracking_classes)]
 
         # ------------------- YOLO Subscriber -------------------
         self.get_logger().info("Starting YOLO Subscriber...")
