@@ -243,7 +243,8 @@ class YOLOPublisher(Node):
                 cv2.putText(display_frame, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
         
         # Add FPS info
-        fps_text = f"Inference: {inference_time*1000:.1f}ms ({1/inference_time:.1f} FPS)"
+        inference_fps = (1/inference_time) if inference_time > 0 else 0
+        fps_text = f"Inference: {inference_time*1000:.1f}ms ({inference_fps:.1f} FPS)"
         cv2.putText(display_frame, fps_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         
         # Show frame
