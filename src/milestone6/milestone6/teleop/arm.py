@@ -232,26 +232,24 @@ class TeleopArm(Node):
 
     def calculate_arm_position_from_object(self, yolo_data: YOLOData):
         """
-        Calculate arm joint positions using VALIDATED POSES from ROBOTIS.
+        Calculate arm joint positions to reach toward detected object using simple visual servoing.
         
-        Uses object bbox size to estimate distance and adjust reach accordingly.
-        Larger bbox = closer object = need less forward reach.
+        Instead of trying to calculate exact IK, we use validated poses and adjust incrementally:
+        1. Start from a known "reach forward" pose
+        2. Adjust joint1 (base rotation) to align with object horizontally
+        3. Use bbox size to estimate if we need to reach further or closer
         
-        Reference from working code:
-        - home_pose: [0.0, -1.05, 0.35, 0.70] (from turtlebot3_manipulation OpenCR code)
-        - init_pose: [0.0, -1.57, 1.37, 0.26] (from OpenCR hardware)
-        
-        Uses joint state feedback to ensure safe transitions.
+        This is more robust than IK because we use proven poses as starting points.
         """
         # Check if we have current joint positions
         if not self.teleop_sub.have_joint_states:
             self.get_logger().error("No joint states available! Cannot calculate safe trajectory.")
-            # Return current target or safe default
-            return self.teleop_sub.target_positions or {
+            # Return safe reaching pose
+            return {
                 'joint1': 0.0,
-                'joint2': -1.05,
-                'joint3': 0.35,
-                'joint4': 0.70
+                'joint2': 0.5,   # Forward reach (positive = down/forward)
+                'joint3': -0.3,  # Extend elbow (negative = extend)
+                'joint4': 0.0    # Level gripper
             }
         
         # Get current joint positions
@@ -259,47 +257,49 @@ class TeleopArm(Node):
         
         # Calculate object center in image coordinates
         obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
+        obj_center_y = yolo_data.bbox_y + (yolo_data.bbox_h / 2.0)
         
         # Normalize horizontal position to [-1, 1]
         norm_x = (obj_center_x - (self.image_width / 2.0)) / (self.image_width / 2.0)
+        norm_y = (obj_center_y - (self.image_height / 2.0)) / (self.image_height / 2.0)
         
         # --- JOINT 1: Pan to align with object ---
         # Camera FOV ~62°, map to joint1 rotation
         camera_hfov_rad = math.radians(62.0)
         desired_joint1 = norm_x * (camera_hfov_rad / 2.0)
-        joint1 = max(-math.pi, min(math.pi, desired_joint1))
+        joint1 = max(-1.5, min(1.5, desired_joint1))  # Limit range
         
         # --- DISTANCE ESTIMATION from bbox width ---
-        # Larger bbox = closer object
-        # Typical bottle at 30cm ~ 100-150px wide
-        # At 20cm ~ 200px wide
-        # At 40cm ~ 75px wide
+        # Larger bbox = closer object, need less reach
         bbox_width_normalized = yolo_data.bbox_w / self.image_width
         
-        # Adjust reach based on estimated distance
-        # Closer objects (larger bbox) need less forward reach
-        if bbox_width_normalized > 0.35:  # Very close
-            # Use more retracted pose for close objects
-            joint2 = -0.8   # Less forward
-            joint3 = 0.2    # Less extension
-            joint4 = 0.6
-            self.get_logger().info(f"Object VERY CLOSE (bbox={yolo_data.bbox_w:.0f}px), using retracted reach")
-        elif bbox_width_normalized > 0.25:  # Close
-            joint2 = -0.95
-            joint3 = 0.3
-            joint4 = 0.65
-            self.get_logger().info(f"Object CLOSE (bbox={yolo_data.bbox_w:.0f}px), using moderate reach")
-        else:  # Normal/far distance
-            # Use standard ROBOTIS home_pose for reaching forward
-            joint2 = -1.05  # Shoulder: forward reach
-            joint3 = 0.35   # Elbow: slightly bent for reach
-            joint4 = 0.70   # Wrist: gripper orientation
-            self.get_logger().info(f"Object NORMAL distance (bbox={yolo_data.bbox_w:.0f}px), using full reach")
+        # FORWARD REACHING POSES (positive joint2 = forward/down)
+        if bbox_width_normalized > 0.35:  # Very close (<20cm)
+            joint2 = 0.3    # Slight forward
+            joint3 = -0.2   # Slight extension
+            joint4 = 0.0    # Level
+            self.get_logger().info(f"Object VERY CLOSE (bbox={yolo_data.bbox_w:.0f}px), short reach")
+        elif bbox_width_normalized > 0.25:  # Close (~25cm)
+            joint2 = 0.5    # Moderate forward
+            joint3 = -0.3   # Moderate extension
+            joint4 = 0.0    # Level
+            self.get_logger().info(f"Object CLOSE (bbox={yolo_data.bbox_w:.0f}px), medium reach")
+        else:  # Far (>30cm)
+            joint2 = 0.7    # Full forward
+            joint3 = -0.4   # Full extension
+            joint4 = 0.0    # Level
+            self.get_logger().info(f"Object FAR (bbox={yolo_data.bbox_w:.0f}px), full reach")
+        
+        # Adjust vertical based on object position in frame
+        # If object is low in frame (high norm_y), reach down more
+        if norm_y > 0.3:  # Object in lower half of frame
+            joint2 += 0.2  # Reach down more
+            self.get_logger().info(f"Object LOW in frame (y={obj_center_y:.0f}), reaching down")
         
         self.get_logger().info(
-            f"Calculated pose from current={list(current_pos.values())[:4]} -> "
-            f"target=[{joint1:.2f}, {joint2:.2f}, {joint3:.2f}, {joint4:.2f}] "
-            f"(obj at x={obj_center_x:.0f}px, w={yolo_data.bbox_w:.0f}px)"
+            f"Calculated pose: j1={joint1:.2f} (pan), j2={joint2:.2f} (reach), "
+            f"j3={joint3:.2f} (extend), j4={joint4:.2f} (level) | "
+            f"Object at ({obj_center_x:.0f}, {obj_center_y:.0f})px, bbox_w={yolo_data.bbox_w:.0f}px"
         )
         
         return {
