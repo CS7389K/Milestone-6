@@ -59,21 +59,15 @@ try:
     network_group = vdevice.configure(hef, configure_params)[0]
     print("✓ Network group configured")
     
-    # Create params for inference
+    # Create params for inference (use default batch size from model)
     network_group_params = network_group.create_params()
-    
-    # Set batch size to 1 for single frame inference
     input_vstreams_params = InputVStreamParams.make(network_group, quantized=False, format_type=FormatType.FLOAT32)
     output_vstreams_params = OutputVStreamParams.make(network_group, quantized=False, format_type=FormatType.FLOAT32)
     
-    # Override batch size if needed
-    for param_name in input_vstreams_params:
-        input_vstreams_params[param_name].user_buffer_format.shape[0] = 1  # Set batch to 1
+    print("✓ VStream parameters created")
     
-    print("✓ VStream parameters created (batch size set to 1)")
-    
-    # Create dummy frame for single batch
-    dummy_frame = np.random.rand(1, model_height, model_width, channels).astype(np.float32)
+    # Create dummy frame - shape should be [H, W, C] without explicit batch
+    dummy_frame = np.random.rand(model_height, model_width, channels).astype(np.float32)
     print(f"  Created dummy data with shape: {dummy_frame.shape}")
     
     print(f"\nRunning test inference with {model_width}x{model_height} dummy frame...")

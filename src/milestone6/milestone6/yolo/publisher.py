@@ -130,23 +130,21 @@ class YOLOPublisher(Node):
             self._network_group = self._vdevice.configure(self._hef, configure_params)[0]
             self._network_group_params = self._network_group.create_params()
             
-            # Get input/output specs
+            # Get input/output specs (use default batch size from model)
             self._input_vstreams_params = InputVStreamParams.make(self._network_group, quantized=False, format_type=FormatType.FLOAT32)
             self._output_vstreams_params = OutputVStreamParams.make(self._network_group, quantized=False, format_type=FormatType.FLOAT32)
-            
-            # Override batch size to 1 for single frame inference
-            for param_name in self._input_vstreams_params:
-                self._input_vstreams_params[param_name].user_buffer_format.shape[0] = 1
             
             # Get expected input shape
             input_info = self._hef.get_input_vstream_infos()[0]
             shape = input_info.shape
             if len(shape) == 4:
                 _, self._model_height, self._model_width, self._model_channels = shape
-            else:
+            elif len(shape) == 3:
                 self._model_height, self._model_width, self._model_channels = shape
+            else:
+                raise ValueError(f"Unexpected input shape: {shape}")
             
-            self.get_logger().info(f"Hailo model input: {self._model_width}x{self._model_height}x{self._model_channels} (batch=1)")
+            self.get_logger().info(f"Hailo model input: {self._model_width}x{self._model_height}x{self._model_channels}")
             
         except Exception as e:
             self.get_logger().error(f"Failed to initialize Hailo: {e}")
@@ -246,11 +244,9 @@ class YOLOPublisher(Node):
         input_frame = cv2.resize(frame, (self._model_width, self._model_height))
         
         # Convert BGR to RGB and normalize to float32 [0, 1]
-        input_rgb = cv2.cvtColor(input_frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        input_data = cv2.cvtColor(input_frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         
-        # Add batch dimension: [H, W, C] -> [1, H, W, C]
-        input_data = np.expand_dims(input_rgb, axis=0)
-        
+        # Input should be [H, W, C] - no batch dimension needed
         # Run inference through Hailo (no activate() needed with scheduler)
         with InferVStreams(self._network_group, self._input_vstreams_params, self._output_vstreams_params) as infer_pipeline:
             input_name = list(self._input_vstreams_params.keys())[0]
