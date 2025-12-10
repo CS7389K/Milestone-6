@@ -50,15 +50,24 @@ Examples:
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
     """Generate launch description for Part 2 mission."""
 
     # Declare launch arguments
+    include_hardware_arg = DeclareLaunchArgument(
+        'include_hardware',
+        default_value='false',
+        description='Include hardware.launch.py (only use when running on TurtleBot itself)'
+    )
+
     yolo_model_arg = DeclareLaunchArgument(
         'yolo_model',
         default_value='yolo11n.pt',
@@ -125,6 +134,15 @@ def generate_launch_description():
         description='Detection timeout in seconds'
     )
 
+    # Hardware Launch (conditional)
+    hardware_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            FindPackageShare('turtlebot3_manipulation_bringup'),
+            '/launch/hardware.launch.py'
+        ]),
+        condition=IfCondition(LaunchConfiguration('include_hardware'))
+    )
+
     # YOLO Publisher Node
     yolo_publisher_node = Node(
         package='milestone6',
@@ -161,6 +179,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         # Launch arguments
+        include_hardware_arg,
         yolo_model_arg,
         image_width_arg,
         image_height_arg,
@@ -172,6 +191,8 @@ def generate_launch_description():
         turn_speed_arg,
         transport_distance_arg,
         detection_timeout_arg,
+        # Hardware (conditional)
+        hardware_launch,
         # Nodes
         yolo_publisher_node,
         mission_node
