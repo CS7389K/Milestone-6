@@ -1,17 +1,21 @@
 #!/bin/bash
 # Wrapper script to fix PyTorch TLS memory allocation issue
-# This preloads libgomp before PyTorch loads, preventing the TLS block error
+# This preloads PyTorch's libgomp before other libraries load
 
-# Find libgomp.so.1 on the system
-LIBGOMP_PATH=$(find /usr/lib -name "libgomp.so.1" 2>/dev/null | head -1)
+# Find PyTorch's bundled libgomp (the one causing the error)
+TORCH_LIBGOMP=$(find ~/.local/lib/python3.8/site-packages/torch.libs -name "libgomp*.so*" 2>/dev/null | head -1)
 
-if [ -z "$LIBGOMP_PATH" ]; then
-    echo "Warning: libgomp.so.1 not found, trying alternative method..."
-    # Try system library path directly
-    export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1
+if [ -z "$TORCH_LIBGOMP" ]; then
+    echo "Warning: PyTorch libgomp not found, trying system libgomp..."
+    # Fallback to system library
+    TORCH_LIBGOMP=$(find /usr/lib -name "libgomp.so.1" 2>/dev/null | head -1)
+fi
+
+if [ -n "$TORCH_LIBGOMP" ]; then
+    echo "Found libgomp at: $TORCH_LIBGOMP"
+    export LD_PRELOAD=$TORCH_LIBGOMP
 else
-    echo "Found libgomp at: $LIBGOMP_PATH"
-    export LD_PRELOAD=$LIBGOMP_PATH
+    echo "ERROR: Could not find libgomp! PyTorch may fail to load."
 fi
 
 # Source ROS2 setup
