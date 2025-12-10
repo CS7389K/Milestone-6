@@ -24,13 +24,13 @@ from rclpy.node import Node
 from std_msgs.msg import String
 
 import cv2
-import numpy as np
-from hailo_platform import HEF, VDevice, InferVStreams, InputVStreamParams, OutputVStreamParams, FormatType
+from ultralytics import YOLO
 
 from .yolo_data import YOLOData
 from ..coco import COCO_CLASSES
 
 print('GStreamer support: %s' % re.search(r'GStreamer\:\s+(.*)', cv2.getBuildInformation()).group(1))
+
 
 
 class YOLOPublisher(Node):
@@ -45,18 +45,15 @@ class YOLOPublisher(Node):
 
     Data Types: https://docs.ros2.org/foxy/api/std_msgs/index-msg.html
     """
-    # Use USB webcam with V4L2 (GStreamer pipeline for Pi Camera doesn't work with USB camera)
+    # Optimized camera settings for faster CPU inference
     _CAPTURE_WIDTH = 640
     _CAPTURE_HEIGHT = 480
-    
-    # Hailo batch size workaround (HEF compiled with batch=640)
-    _HAILO_BATCH_SIZE = 640
 
     def __init__(
             self,
-            yolo_model: str = 'models/yolov11n.hef',
-            image_width: int = 500,
-            image_height: int = 320,
+            yolo_model: str = 'yolo11n.pt',  # Use .pt instead of .hef
+            image_width: int = 320,  # Smaller for faster inference
+            image_height: int = 192,  # Maintain aspect ratio
             display: bool = True,
         ):
         super().__init__('yolo_publisher')
@@ -73,7 +70,7 @@ class YOLOPublisher(Node):
         self._output_height = self.get_parameter('image_height').value
         self._display = self.get_parameter('display').value
         
-        self.get_logger().info("Initializing YOLO Publisher Node...")
+        self.get_logger().info("Initializing YOLO Publisher Node (CPU mode)...")
         self._publisher = self.create_publisher(String, 'yolo_topic', 10)
 
         # Open camera with V4L2
@@ -89,29 +86,21 @@ class YOLOPublisher(Node):
         
         self.get_logger().info("Camera opened successfully")
 
-        # Initialize Hailo
-        self.get_logger().info("Loading Hailo HEF model...")
-        self._init_hailo(yolo_model)
-        self.get_logger().info("Hailo model ready!")
+        # Initialize YOLO model with optimizations for CPU
+        self.get_logger().info(f"Loading YOLO model: {yolo_model}")
+        self._model = YOLO(yolo_model, task="detect")
+        
+        # Warmup inference
+        self.get_logger().info("Warming up model...")
+        import numpy as np
+        dummy_frame = np.zeros((self._output_height, self._output_width, 3), dtype=np.uint8)
+        self._model(dummy_frame, imgsz=self._output_width, verbose=False)
+        
+        self.get_logger().info("YOLO model ready!")
         
         if self._display:
             cv2.namedWindow('YOLO Detection', cv2.WINDOW_AUTOSIZE)
             self.get_logger().info("Display window created. Press 'q' to close.")
-
-    def _init_hailo(self, hef_path: str):
-        """Initialize Hailo device and load HEF model."""
-        self._hef = HEF(hef_path)
-        self._vdevice = VDevice()
-        self._network_groups = self._vdevice.configure(self._hef)
-        self._network_group = self._network_groups[0]
-        
-        # Get model input shape
-        input_info = self._hef.get_input_vstream_infos()[0]
-        shape = input_info.shape
-        self._model_height, self._model_width = shape[0], shape[1]
-        
-        self.get_logger().warn(f"HEF batch_size={self._HAILO_BATCH_SIZE}. Replicating frames (SLOW!)")
-        self.get_logger().info(f"Model input: {self._model_width}x{self._model_height}")
 
     def step(self):
         """Capture frame and run inference."""
@@ -122,87 +111,52 @@ class YOLOPublisher(Node):
             self.get_logger().warn("Failed to read frame")
             return
         
-        # Resize to output dimensions
+        # Resize to output dimensions (smaller = faster)
         frame_resized = cv2.resize(frame, (self._output_width, self._output_height))
         
-        # Run Hailo inference
-        detections = self._run_inference(frame_resized)
+        # Run YOLO inference with optimizations
+        t_infer_start = time.time()
+        results = self._model(
+            frame_resized,
+            imgsz=self._output_width,  # Use frame size directly (no upscaling)
+            conf=0.25,  # Confidence threshold
+            iou=0.45,  # NMS IoU threshold
+            verbose=False,  # Disable logging
+            half=False,  # Use FP32 (FP16 can be unstable on CPU)
+            device='cpu'  # Explicit CPU usage
+        )
+        t_infer_end = time.time()
+        
+        # Extract detections
+        detections = self._extract_detections(results[0])
         
         t_end = time.time()
-        fps = 1.0 / (t_end - t_start) if (t_end - t_start) > 0 else 0
+        total_fps = 1.0 / (t_end - t_start) if (t_end - t_start) > 0 else 0
+        infer_time = t_infer_end - t_infer_start
         
         # Publish detections
         self._publish_detections(detections)
         
         # Display
         if self._display:
-            self._display_frame(frame_resized, detections, fps)
+            self._display_frame(frame_resized, detections, total_fps, infer_time)
 
-    def _run_inference(self, frame):
-        """Run Hailo inference on frame."""
-        # Resize to model input size
-        input_frame = cv2.resize(frame, (self._model_width, self._model_height))
-        
-        # Convert BGR to RGB (UINT8)
-        input_rgb = cv2.cvtColor(input_frame, cv2.COLOR_BGR2RGB)
-        
-        # Replicate frame to match batch size (workaround for batch=640 HEF)
-        input_batch = np.stack([input_rgb] * self._HAILO_BATCH_SIZE, axis=0)
-        
-        # Run inference
-        with self._network_group.activate():
-            input_params = InputVStreamParams.make_from_network_group(
-                self._network_group, quantized=True, format_type=FormatType.UINT8
-            )
-            output_params = OutputVStreamParams.make_from_network_group(
-                self._network_group, quantized=False, format_type=FormatType.FLOAT32
-            )
-            
-            with InferVStreams(self._network_group, input_params, output_params) as infer_pipeline:
-                input_name = list(input_params.keys())[0]
-                results = infer_pipeline.infer({input_name: input_batch})
-        
-        # Post-process results
-        return self._postprocess(results, frame.shape[1], frame.shape[0])
-    
-    def _postprocess(self, results, frame_w, frame_h):
-        """Extract detections from Hailo output."""
-        output_name = list(results.keys())[0]
-        output = results[output_name]
-        
+    def _extract_detections(self, result):
+        """Extract detections from YOLO result."""
         detections = []
         
-        # Handle NMS post-processed output (list format)
-        if isinstance(output, list) and len(output) > 0:
-            # Use first batch element
-            batch_detections = output[0] if len(output) > 0 else []
+        if result.boxes is not None and len(result.boxes) > 0:
+            boxes = result.boxes.xyxy.cpu().numpy()  # x1, y1, x2, y2
+            confidences = result.boxes.conf.cpu().numpy()
+            class_ids = result.boxes.cls.cpu().numpy().astype(int)
             
-            for det in batch_detections:
-                if len(det) >= 6:
-                    class_id = int(det[0])
-                    confidence = float(det[1])
-                    x1, y1, x2, y2 = float(det[2]), float(det[3]), float(det[4]), float(det[5])
-                    
-                    if confidence < 0.25:
-                        continue
-                    
-                    # Scale to frame size
-                    x1 = int(x1 * frame_w / self._model_width)
-                    y1 = int(y1 * frame_h / self._model_height)
-                    x2 = int(x2 * frame_w / self._model_width)
-                    y2 = int(y2 * frame_h / self._model_height)
-                    
-                    # Clip to bounds
-                    x1 = max(0, min(x1, frame_w))
-                    y1 = max(0, min(y1, frame_h))
-                    x2 = max(0, min(x2, frame_w))
-                    y2 = max(0, min(y2, frame_h))
-                    
-                    detections.append({
-                        'class_id': class_id,
-                        'confidence': confidence,
-                        'bbox': (x1, y1, x2, y2)
-                    })
+            for box, conf, class_id in zip(boxes, confidences, class_ids):
+                x1, y1, x2, y2 = box
+                detections.append({
+                    'class_id': int(class_id),
+                    'confidence': float(conf),
+                    'bbox': (int(x1), int(y1), int(x2), int(y2))
+                })
         
         return detections
     
@@ -229,7 +183,7 @@ class YOLOPublisher(Node):
             })
             self._publisher.publish(msg)
     
-    def _display_frame(self, frame, detections, fps):
+    def _display_frame(self, frame, detections, fps, infer_time):
         """Display frame with detections."""
         display_frame = frame.copy()
         
@@ -248,8 +202,9 @@ class YOLOPublisher(Node):
             cv2.rectangle(display_frame, (x1, y1 - label_h - 10), (x1 + label_w, y1), (0, 255, 0), -1)
             cv2.putText(display_frame, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
         
-        # Add FPS
+        # Add timing info
         cv2.putText(display_frame, f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        cv2.putText(display_frame, f"Inference: {infer_time*1000:.0f}ms", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         
         cv2.imshow('YOLO Detection', display_frame)
         cv2.waitKey(1)
@@ -257,9 +212,6 @@ class YOLOPublisher(Node):
     def shutdown(self):
         """Clean up resources."""
         self.get_logger().info("Shutting down YOLO Publisher...")
-        
-        if hasattr(self, '_vdevice'):
-            self._vdevice.release()
         
         if self._capture is not None and self._capture.isOpened():
             self._capture.release()
