@@ -157,11 +157,15 @@ class TeleopBase(Node):
                     f"✓ At target distance! bbox={data.bbox_w:.0f}px "
                     f"(target={self._target_bbox}±{self._bbox_tolerance}px)"
                 )
+                # At target distance - allow turning to center
+                # angular_vel already calculated above
             elif bbox_error < -self._bbox_tolerance:
                 # Object too small (too far) - move forward
                 # Scale speed based on error magnitude
                 distance_ratio = min(1.0, abs(bbox_error) / 100.0)
                 linear_vel = self._forward_speed * distance_ratio
+                # IMPORTANT: Don't turn while moving forward/backward
+                angular_vel = 0.0
                 self.get_logger().debug(
                     f"Moving forward: bbox={data.bbox_w:.0f}px < target={self._target_bbox}px "
                     f"(error={bbox_error:.0f}px, speed={linear_vel:.2f})"
@@ -169,6 +173,8 @@ class TeleopBase(Node):
             else:
                 # Object too large (too close) - move backward slowly
                 linear_vel = -self._forward_speed * 0.3  # Slower backward movement
+                # IMPORTANT: Don't turn while moving forward/backward
+                angular_vel = 0.0
                 self.get_logger().debug(
                     f"Too close, backing up: bbox={data.bbox_w:.0f}px > target={self._target_bbox}px "
                     f"(error={bbox_error:.0f}px)"
