@@ -1,3 +1,14 @@
+#!/usr/bin/env python3
+"""
+Part 1: Visual Servoing (Centering Only)
+
+This node implements the full Part 1 requirements:
+1. Detect bottle using YOLO
+2. Center on the bottle (rotate base to align)
+
+Usage:
+    ros2 run milestone6 part1
+"""
 import rclpy
 from rclpy.node import Node
 

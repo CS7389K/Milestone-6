@@ -21,17 +21,6 @@ States:
 
 Usage:
     ros2 run milestone6 part2
-
-Parameters:
-    - tracking_classes: Comma-separated COCO class IDs to track (default: '39' for bottles)
-    - image_width: Camera image width (default: 500)
-    - image_height: Camera image height (default: 320)
-    - center_tolerance: Centering tolerance in pixels (default: 30)
-    - target_bbox_width: Ideal bbox width for grabbing (default: 180)
-    - bbox_tolerance: Acceptable bbox width range (default: 20)
-    - forward_speed: Base forward speed m/s (default: 0.15)
-    - turn_speed: Base turn speed rad/s (default: 1.0)
-    - transport_distance: Distance to move with object in meters (default: 1.0)
 """
 
 import math
