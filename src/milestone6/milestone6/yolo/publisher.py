@@ -101,6 +101,9 @@ class YOLOPublisher(Node):
         self.get_logger().info("Loading YOLO model...")
         self.model = YOLO(yolo_model, task="detect")
         
+        # Set device (CPU for now, GPU detection can be added later)
+        self._device = 'cpu'
+        
         # Warm up model with a dummy inference for faster first detection
         import numpy as np
         dummy_frame = np.zeros((self._target_height, self._target_width, 3), dtype=np.uint8)
