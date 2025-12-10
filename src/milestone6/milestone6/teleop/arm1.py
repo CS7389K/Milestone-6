@@ -267,32 +267,41 @@ class TeleopArmV1(Node):
                     self.set_state(ArmMissionState.WAITING)
                     return
 
+                # CRITICAL: Use CURRENT detection, not stale data
                 reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
 
-                # Extend further to actually reach the object (subtract from joint3 to extend more)
+                # Approach: Extend further to reach the object
+                # Key insight: Need to reach DOWN more (increase joint2) and FORWARD more (decrease joint3)
                 grasp_pose = {
                     'joint1': reach_pose['joint1'],
-                    'joint2': reach_pose['joint2'] + 0.15,  # Reach down/forward more
-                    'joint3': reach_pose['joint3'] - 0.15,  # Extend elbow more (negative = extend)
-                    'joint4': reach_pose['joint4']
-                }
-                self.get_logger().info(f"Approaching: j2={grasp_pose['joint2']:.2f}, j3={grasp_pose['joint3']:.2f}")
-                self.teleop_pub.send_arm_trajectory(grasp_pose)
-                time.sleep(2.0)  # Give more time to reach
-
-                # Close gripper
-                self.get_logger().info("Closing gripper...")
-                self.teleop_pub.gripper_close()
-                time.sleep(2.0)  # Give time to grip
-
-                # Lift pose - keep forward position but lift up slightly
-                lift_pose = {
-                    'joint1': reach_pose['joint1'],
-                    'joint2': max(0.0, reach_pose['joint2'] - 0.2),  # Lift up slightly (reduce forward)
-                    'joint3': reach_pose['joint3'] + 0.1,  # Retract elbow slightly
+                    'joint2': reach_pose['joint2'] + 0.2,  # Reach down/forward MORE
+                    'joint3': reach_pose['joint3'] - 0.2,  # Extend elbow MORE (negative = extend)
                     'joint4': 0.0  # Keep level
                 }
-                self.get_logger().info(f"Lifting: j2={lift_pose['joint2']:.2f}, j3={lift_pose['joint3']:.2f}")
+                self.get_logger().info(
+                    f"Approaching bottle: j1={grasp_pose['joint1']:.2f}, "
+                    f"j2={grasp_pose['joint2']:.2f} (DOWN), j3={grasp_pose['joint3']:.2f} (EXTEND)"
+                )
+                self.teleop_pub.send_arm_trajectory(grasp_pose)
+                time.sleep(2.5)  # Give time to reach
+
+                # Close gripper
+                self.get_logger().info("Closing gripper on bottle...")
+                self.teleop_pub.gripper_close()
+                time.sleep(2.0)
+
+                # Lift pose - STAY FORWARD, just retract elbow to lift
+                # DO NOT reduce joint2, that makes it go backward!
+                lift_pose = {
+                    'joint1': grasp_pose['joint1'],  # Keep same rotation
+                    'joint2': grasp_pose['joint2'],  # KEEP same forward position!
+                    'joint3': grasp_pose['joint3'] + 0.3,  # Retract elbow to lift (positive = retract/up)
+                    'joint4': 0.0
+                }
+                self.get_logger().info(
+                    f"Lifting bottle: j2={lift_pose['joint2']:.2f} (STAY FORWARD), "
+                    f"j3={lift_pose['joint3']:.2f} (RETRACT UP)"
+                )
                 self.teleop_pub.send_arm_trajectory(lift_pose)
                 time.sleep(2.0)
 
