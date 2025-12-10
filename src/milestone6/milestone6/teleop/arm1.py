@@ -160,41 +160,23 @@ class TeleopArmV1(Node):
 
         # Object center
         obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
-        obj_center_y = yolo_data.bbox_y + (yolo_data.bbox_h / 2.0)
 
         # Normalize to [-1, 1]
         norm_x = (obj_center_x - (self.image_width / 2.0)) / (self.image_width / 2.0)
-        norm_y = (obj_center_y - (self.image_height / 2.0)) / (self.image_height / 2.0)
 
         # Approx camera HFOV mapping for base rotation
         camera_hfov_rad = math.radians(62.0)
         desired_joint1 = norm_x * (camera_hfov_rad / 2.0)
         joint1 = max(-1.5, min(1.5, desired_joint1))
 
-        # FORWARD REACHING POSE (positive joint2 = down/forward, negative joint3 = extend)
-        # Adjust based on bbox size (larger = closer)
-        bbox_width_normalized = yolo_data.bbox_w / self.image_width
+        # *** CALIBRATED POSE FROM HARDWARE TESTING ***
+        # These values were empirically determined to successfully grip bottles
+        # at the target approach distance (bbox_width ≈ 180px)
+        joint2 = 0.640  # Calibrated shoulder angle
+        joint3 = 0.260  # Calibrated elbow angle
+        joint4 = 0.000  # Calibrated wrist angle
         
-        if bbox_width_normalized > 0.35:  # Very close (< 20cm)
-            joint2 = 0.2   # Less aggressive for close objects
-            joint3 = -0.1
-            joint4 = 0.0
-            self.get_logger().info(f"VERY CLOSE (bbox={yolo_data.bbox_w:.0f}px) - gentle reach")
-        elif bbox_width_normalized > 0.25:  # Close (~25cm)
-            joint2 = 0.4
-            joint3 = -0.2
-            joint4 = 0.0
-            self.get_logger().info(f"CLOSE (bbox={yolo_data.bbox_w:.0f}px) - moderate reach")
-        else:  # Far (>30cm)
-            joint2 = 0.6
-            joint3 = -0.35
-            joint4 = 0.0
-            self.get_logger().info(f"FAR (bbox={yolo_data.bbox_w:.0f}px) - full reach")
-        
-        # Adjust for vertical position - REDUCED to avoid toppling
-        if norm_y > 0.3:  # Object low in frame
-            joint2 += 0.1  # Reduced from 0.2
-            self.get_logger().info(f"Object LOW in frame, reaching down slightly more")
+        self.get_logger().info(f"Using CALIBRATED pose (bbox={yolo_data.bbox_w:.0f}px)")
 
         return {
             'joint1': joint1,
@@ -270,13 +252,13 @@ class TeleopArmV1(Node):
                 # CRITICAL: Use CURRENT detection, not stale data
                 reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
 
-                # Approach: Extend further to reach the object
-                # Key insight: Need to reach DOWN more (increase joint2) and FORWARD more (decrease joint3)
+                # Approach: Small adjustment from calibrated pose to ensure contact
+                # Your calibrated pose already reaches the bottle, so we make minimal adjustment
                 grasp_pose = {
                     'joint1': reach_pose['joint1'],
-                    'joint2': reach_pose['joint2'] + 0.1,  # REDUCED from 0.2 - less aggressive
-                    'joint3': reach_pose['joint3'] - 0.1,  # REDUCED from 0.2 - less aggressive
-                    'joint4': 0.0  # Keep level
+                    'joint2': reach_pose['joint2'] + 0.05,  # Tiny adjustment down
+                    'joint3': reach_pose['joint3'] - 0.05,  # Tiny adjustment forward
+                    'joint4': 0.0
                 }
                 self.get_logger().info(
                     f"Approaching bottle: j1={grasp_pose['joint1']:.2f}, "
