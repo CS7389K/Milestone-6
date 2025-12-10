@@ -270,20 +270,73 @@ class YOLOPublisher(Node):
     
     def _postprocess_yolo(self, infer_results, orig_width, orig_height, conf_thresh=0.25, iou_thresh=0.45):
         """Post-process YOLO output from Hailo."""
-        # Get output tensor (YOLOv11 typically outputs [1, num_detections, 84+num_classes])
+        # Get output tensor
         output_name = list(infer_results.keys())[0]
         output = infer_results[output_name]
         
+        # Debug: log output shape to understand format
+        if not hasattr(self, '_logged_output_shape'):
+            self.get_logger().info(f"YOLO output shape: {type(output)}, content: {output if not isinstance(output, np.ndarray) else output.shape}")
+            self._logged_output_shape = True
+        
         detections = []
         
-        # YOLOv11 output format: [batch, num_detections, (x, y, w, h, conf, class_probs...)]
-        for detection in output[0]:  # Iterate over batch=0
+        # Handle different output formats
+        if isinstance(output, list):
+            # NMS post-processed output (already filtered detections)
+            # Format: list of detections per image in batch
+            if len(output) > 0 and len(output[0]) > 0:
+                # Use first image from batch
+                for det in output[0]:
+                    # det format: [class_id, confidence, x1, y1, x2, y2] or similar
+                    if len(det) >= 6:
+                        class_id = int(det[0])
+                        confidence = float(det[1])
+                        x1, y1, x2, y2 = det[2:6]
+                        
+                        if confidence < conf_thresh:
+                            continue
+                        
+                        # Scale to original resolution
+                        x1 = int(x1 * orig_width / self._model_width)
+                        y1 = int(y1 * orig_height / self._model_height)
+                        x2 = int(x2 * orig_width / self._model_width)
+                        y2 = int(y2 * orig_height / self._model_height)
+                        
+                        # Clip to frame boundaries
+                        x1 = max(0, min(x1, orig_width))
+                        y1 = max(0, min(y1, orig_height))
+                        x2 = max(0, min(x2, orig_width))
+                        y2 = max(0, min(y2, orig_height))
+                        
+                        detections.append({
+                            'bbox': (x1, y1, x2, y2),
+                            'confidence': confidence,
+                            'class_id': class_id
+                        })
+            return detections
+        
+        if not isinstance(output, np.ndarray):
+            return detections
+        
+        # YOLOv11 raw output format: [batch, num_detections, (x, y, w, h, conf, class_probs...)]
+        if len(output.shape) < 2:
+            return detections
+            
+        # Process first image from batch
+        for detection in output[0]:
+            if len(detection) < 5:
+                continue
+                
             # Extract confidence and class scores
             objectness = detection[4]
             if objectness < conf_thresh:
                 continue
                 
-            class_scores = detection[5:]
+            class_scores = detection[5:] if len(detection) > 5 else []
+            if len(class_scores) == 0:
+                continue
+                
             class_id = np.argmax(class_scores)
             class_conf = class_scores[class_id]
             
