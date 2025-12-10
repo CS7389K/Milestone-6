@@ -42,7 +42,9 @@ class TeleopBase(Node):
         self.declare_parameter('image_width', 500)
         self.declare_parameter('image_height', 320)
         self.declare_parameter('tolerance', 50)
-        self.declare_parameter('min_bbox_width', 150)
+        self.declare_parameter('min_bbox_width', 150)  # Stop when object this wide (px)
+        self.declare_parameter('target_bbox_width', 180)  # Ideal bbox width for manipulation
+        self.declare_parameter('bbox_tolerance', 20)  # Acceptable range around target
         self.declare_parameter('forward_speed', 0.15)
         self.declare_parameter('turn_speed', 1.5)
         self.declare_parameter('track_class', 39)  # Default to "bottle"
@@ -53,6 +55,8 @@ class TeleopBase(Node):
         self._image_height = self.get_parameter('image_height').value
         self._tolerance = self.get_parameter('tolerance').value 
         self._bbox_threshold = self.get_parameter('min_bbox_width').value
+        self._target_bbox = self.get_parameter('target_bbox_width').value
+        self._bbox_tolerance = self.get_parameter('bbox_tolerance').value
         self._forward_speed = self.get_parameter('forward_speed').value
         self._turn_speed = self.get_parameter('turn_speed').value
         self._track_class = self.get_parameter('track_class').value
@@ -128,14 +132,32 @@ class TeleopBase(Node):
                 angular_vel = 0.0
                 self.get_logger().debug("Object centered horizontally")
 
-            # Determine linear velocity (move forward if object is far)
-            if data.bbox_w < self._bbox_threshold:
-                linear_vel = self._forward_speed
-                self.get_logger().debug(f"Moving forward: bbox_w={data.bbox_w:.1f}px")
-            else:
-                # Object is large (close), stop
+            # Determine linear velocity (move forward/backward to maintain target distance)
+            bbox_error = data.bbox_w - self._target_bbox
+            
+            if abs(bbox_error) <= self._bbox_tolerance:
+                # Perfect distance - object is within target range
                 linear_vel = 0.0
-                self.get_logger().debug(f"Object is close, stopping: bbox_w={data.bbox_w:.1f}px")
+                self.get_logger().info(
+                    f"✓ At target distance! bbox={data.bbox_w:.0f}px "
+                    f"(target={self._target_bbox}±{self._bbox_tolerance}px)"
+                )
+            elif bbox_error < -self._bbox_tolerance:
+                # Object too small (too far) - move forward
+                # Scale speed based on error magnitude
+                distance_ratio = min(1.0, abs(bbox_error) / 100.0)
+                linear_vel = self._forward_speed * distance_ratio
+                self.get_logger().debug(
+                    f"Moving forward: bbox={data.bbox_w:.0f}px < target={self._target_bbox}px "
+                    f"(error={bbox_error:.0f}px, speed={linear_vel:.2f})"
+                )
+            else:
+                # Object too large (too close) - move backward slowly
+                linear_vel = -self._forward_speed * 0.3  # Slower backward movement
+                self.get_logger().debug(
+                    f"Too close, backing up: bbox={data.bbox_w:.0f}px > target={self._target_bbox}px "
+                    f"(error={bbox_error:.0f}px)"
+                )
             
             # Update teleop velocity command
             self.teleop.set_velocity(linear_x=linear_vel, angular_z=angular_vel)

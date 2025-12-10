@@ -129,11 +129,12 @@ def generate_launch_description():
             'move_wheels': True,
             'image_width': 500,
             'image_height': 320,
-            'tolerance': 50,
-            'min_bbox_width': 150,
-            'forward_speed': 0.15,
-            'turn_speed': 1.5,
-            'track_class': 39,
+            'tolerance': 50,              # Horizontal centering tolerance (pixels)
+            'target_bbox_width': 180,     # Target bbox size at optimal grab distance
+            'bbox_tolerance': 15,         # Acceptable variation (±15px)
+            'forward_speed': 0.12,        # Slower for precise positioning
+            'turn_speed': 1.2,            # Slower turning for stability
+            'track_class': 39,            # bottle
         }]
     )
 

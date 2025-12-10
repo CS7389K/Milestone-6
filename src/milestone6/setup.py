@@ -38,6 +38,7 @@ setup(
             f"yolo_debug_subscriber = {package_name}.yolo.debug_subscriber:main",
             f"arm1 = {package_name}.teleop.arm1:main",
             f"arm2 = {package_name}.teleop.arm2:main",
+            f"arm_calibrate = {package_name}.teleop.arm_calibrate:main",
         ],
     },
 )

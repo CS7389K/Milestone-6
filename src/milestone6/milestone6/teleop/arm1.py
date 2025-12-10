@@ -175,26 +175,26 @@ class TeleopArmV1(Node):
         # Adjust based on bbox size (larger = closer)
         bbox_width_normalized = yolo_data.bbox_w / self.image_width
         
-        if bbox_width_normalized > 0.35:  # Very close
-            joint2 = 0.3
+        if bbox_width_normalized > 0.35:  # Very close (< 20cm)
+            joint2 = 0.2   # Less aggressive for close objects
+            joint3 = -0.1
+            joint4 = 0.0
+            self.get_logger().info(f"VERY CLOSE (bbox={yolo_data.bbox_w:.0f}px) - gentle reach")
+        elif bbox_width_normalized > 0.25:  # Close (~25cm)
+            joint2 = 0.4
             joint3 = -0.2
             joint4 = 0.0
-            self.get_logger().info(f"VERY CLOSE (bbox={yolo_data.bbox_w:.0f}px)")
-        elif bbox_width_normalized > 0.25:  # Close
-            joint2 = 0.5
-            joint3 = -0.3
+            self.get_logger().info(f"CLOSE (bbox={yolo_data.bbox_w:.0f}px) - moderate reach")
+        else:  # Far (>30cm)
+            joint2 = 0.6
+            joint3 = -0.35
             joint4 = 0.0
-            self.get_logger().info(f"CLOSE (bbox={yolo_data.bbox_w:.0f}px)")
-        else:  # Far
-            joint2 = 0.7
-            joint3 = -0.4
-            joint4 = 0.0
-            self.get_logger().info(f"FAR (bbox={yolo_data.bbox_w:.0f}px)")
+            self.get_logger().info(f"FAR (bbox={yolo_data.bbox_w:.0f}px) - full reach")
         
-        # Adjust for vertical position
+        # Adjust for vertical position - REDUCED to avoid toppling
         if norm_y > 0.3:  # Object low in frame
-            joint2 += 0.2
-            self.get_logger().info(f"Object LOW in frame, reaching down more")
+            joint2 += 0.1  # Reduced from 0.2
+            self.get_logger().info(f"Object LOW in frame, reaching down slightly more")
 
         return {
             'joint1': joint1,
@@ -274,8 +274,8 @@ class TeleopArmV1(Node):
                 # Key insight: Need to reach DOWN more (increase joint2) and FORWARD more (decrease joint3)
                 grasp_pose = {
                     'joint1': reach_pose['joint1'],
-                    'joint2': reach_pose['joint2'] + 0.2,  # Reach down/forward MORE
-                    'joint3': reach_pose['joint3'] - 0.2,  # Extend elbow MORE (negative = extend)
+                    'joint2': reach_pose['joint2'] + 0.1,  # REDUCED from 0.2 - less aggressive
+                    'joint3': reach_pose['joint3'] - 0.1,  # REDUCED from 0.2 - less aggressive
                     'joint4': 0.0  # Keep level
                 }
                 self.get_logger().info(
