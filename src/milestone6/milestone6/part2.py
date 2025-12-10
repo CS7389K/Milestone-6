@@ -155,10 +155,7 @@ class Part2(Node):
             cls, f'unknown({cls})') for cls in self.tracking_classes]
         self.get_logger().info(
             f"Tracking COCO classes: {', '.join([f'{name} (ID: {cls})' for name, cls in zip(class_names, self.tracking_classes)])}")
-        self.get_logger().info("=" * 70)
-        self.get_logger().info("Part 2 Ready!")
-        self.get_logger().info("Place target object at edge of camera view to start.")
-        self.get_logger().info("=" * 70)
+        self.get_logger().info("Part 2 Node Initialized. Waiting for detections...")
 
     # ------------------------------------------------------------------
     # YOLO Callback
