@@ -127,7 +127,7 @@ class YOLOPublisher(Node):
             return
 
         start_time = time.time()
-        results = self._model(frame)
+        results = self._model(frame, verbose=False)
         end_time = time.time()
 
         # Extract and publish detection data
