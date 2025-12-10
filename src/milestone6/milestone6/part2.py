@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Part 2 Mission: Complete Object Grab and Transport Sequence
+Part 2: Complete Object Grab and Transport Sequence
 
 This node implements the full Part 2 requirements:
 1. Detect bottle using YOLO
@@ -10,20 +10,20 @@ This node implements the full Part 2 requirements:
 5. Move forward 1 meter (3.2 feet)
 6. Release the bottle
 
-Mission States:
+States:
     IDLE          -> Waiting for object detection
     CENTERING     -> Rotating base to center object in frame
     APPROACHING   -> Moving forward to optimal grab distance
     GRABBING      -> Executing arm grab sequence
     TRANSPORTING  -> Moving forward 1 meter with object
     RELEASING     -> Placing object and retracting arm
-    DONE          -> Mission complete
+    DONE          -> Complete
 
 Usage:
-    ros2 run milestone6 part2_mission
+    ros2 run milestone6 part2
 
 Parameters:
-    - target_class: COCO class ID to grab (default: 39 for bottles)
+    - tracking_classes: Comma-separated COCO class IDs to track (default: '39' for bottles)
     - image_width: Camera image width (default: 500)
     - image_height: Camera image height (default: 320)
     - center_tolerance: Centering tolerance in pixels (default: 30)
@@ -54,49 +54,54 @@ from milestone6.yolo.subscriber import YOLOSubscriber
 from milestone6.yolo.yolo_data import YOLOData
 
 
-class MissionState(Enum):
-    """Mission states for complete grab and transport sequence."""
+class State(Enum):
+    """States for complete grab and transport sequence."""
     IDLE = 1          # Waiting for detection
     CENTERING = 2     # Rotating to center object
     APPROACHING = 3   # Moving forward to grab distance
     GRABBING = 4      # Executing grab sequence
     TRANSPORTING = 5  # Moving forward 1 meter
     RELEASING = 6     # Placing and retracting
-    DONE = 7         # Mission complete
+    DONE = 7          # Complete
 
 
-class Part2Mission(Node):
+class Part2(Node):
     """
-    Complete Part 2 mission implementation with object centering,
+    Complete Part 2 implementation with object centering,
     grabbing using FollowJointTrajectory, transport, and release.
     """
 
     def __init__(self):
-        super().__init__('part2_mission')
+        super().__init__('part2')
 
         # ------------------- Parameters -------------------
-        self.declare_parameter('target_class', 39)  # Bottle
-        self.declare_parameter('image_width', 500)
-        self.declare_parameter('image_height', 320)
+        # Comma-separated COCO class IDs
+        self.declare_parameter('tracking_classes', '39')
+        self.declare_parameter('image_width', 1280)
+        self.declare_parameter('image_height', 720)
+        self.declare_parameter('bbox_tolerance', 20)  # pixels
         self.declare_parameter('center_tolerance', 30)  # pixels
         self.declare_parameter('target_bbox_width', 180)  # pixels
-        self.declare_parameter('bbox_tolerance', 20)  # pixels
         self.declare_parameter('forward_speed', 0.15)  # m/s
         self.declare_parameter('turn_speed', 1.0)  # rad/s
+        self.declare_parameter('detection_timeout', 0.5)  # seconds
         self.declare_parameter('transport_distance', 1.0)  # meters
-        self.declare_parameter('detection_timeout', 1.0)  # seconds
 
-        self.target_class = self.get_parameter('target_class').value
+        tracking_classes_str = self.get_parameter('tracking_classes').value
         self.image_width = self.get_parameter('image_width').value
         self.image_height = self.get_parameter('image_height').value
-        self.center_tolerance = self.get_parameter('center_tolerance').value
-        self.target_bbox = self.get_parameter('target_bbox_width').value
         self.bbox_tolerance = self.get_parameter('bbox_tolerance').value
+        self.center_tolerance = self.get_parameter('center_tolerance').value
+        self.target_bbox_width = self.get_parameter('target_bbox_width').value
         self.forward_speed = self.get_parameter('forward_speed').value
         self.turn_speed = self.get_parameter('turn_speed').value
+        self.detection_timeout = self.get_parameter('detection_timeout').value
         self.transport_distance = self.get_parameter(
             'transport_distance').value
-        self.detection_timeout = self.get_parameter('detection_timeout').value
+
+        # Parse tracking classes from comma-separated string
+        self.tracking_classes = [
+            int(c.strip()) for c in tracking_classes_str.split(',') if c.strip()]
 
         # ------------------- YOLO Subscriber -------------------
         self.get_logger().info("Starting YOLO Subscriber...")
@@ -122,7 +127,7 @@ class Part2Mission(Node):
         )
 
         # ------------------- State Machine -------------------
-        self.state = MissionState.IDLE
+        self.state = State.IDLE
         self.last_detection_time = None
         self.last_yolo_data = None
 
@@ -142,12 +147,13 @@ class Part2Mission(Node):
         # ------------------- Timer -------------------
         self.timer = self.create_timer(0.1, self.tick)  # 10 Hz
 
-        class_name = COCO_CLASSES.get(self.target_class, 'unknown')
+        class_names = [COCO_CLASSES.get(
+            cls, f'unknown({cls})') for cls in self.tracking_classes]
         self.get_logger().info(
-            f"🎯 Tracking COCO class: '{class_name}' (ID: {self.target_class})")
+            f"Tracking COCO classes: {', '.join([f'{name} (ID: {cls})' for name, cls in zip(class_names, self.tracking_classes)])}")
         self.get_logger().info("=" * 70)
-        self.get_logger().info("Part 2 Mission Ready!")
-        self.get_logger().info("Place bottle at edge of camera view to start mission.")
+        self.get_logger().info("Part 2 Ready!")
+        self.get_logger().info("Place target object at edge of camera view to start.")
         self.get_logger().info("=" * 70)
 
     # ------------------------------------------------------------------
@@ -155,8 +161,10 @@ class Part2Mission(Node):
     # ------------------------------------------------------------------
     def _yolo_callback(self, data: YOLOData):
         """Process YOLO detections."""
-        # Filter by target class
-        if data.clz != self.target_class:
+        # Filter by tracking classes
+        if data.clz not in self.tracking_classes:
+            self.get_logger().debug(
+                f"Ignored detection of class ID {data.clz}")
             return
 
         # Update detection
@@ -164,10 +172,11 @@ class Part2Mission(Node):
         self.last_yolo_data = data
 
         # Log detection in IDLE state
-        if self.state == MissionState.IDLE:
+        if self.state == State.IDLE:
             obj_center_x = data.bbox_x + (data.bbox_w / 2.0)
+            class_name = COCO_CLASSES.get(data.clz, f'unknown({data.clz})')
             self.get_logger().info(
-                f"🔍 Bottle detected! BBox: ({data.bbox_x:.0f}, {data.bbox_y:.0f}, "
+                f"{class_name} detected! BBox: ({data.bbox_x:.0f}, {data.bbox_y:.0f}, "
                 f"{data.bbox_w:.0f}x{data.bbox_h:.0f}), Center: {obj_center_x:.0f}px"
             )
 
@@ -195,7 +204,7 @@ class Part2Mission(Node):
 
     def is_at_grab_distance(self, yolo_data: YOLOData):
         """Check if object is at ideal grabbing distance."""
-        bbox_error = abs(yolo_data.bbox_w - self.target_bbox)
+        bbox_error = abs(yolo_data.bbox_w - self.target_bbox_width)
         return bbox_error <= self.bbox_tolerance
 
     def center_on_object(self, yolo_data: YOLOData):
@@ -211,9 +220,9 @@ class Part2Mission(Node):
             self.stop_base()
             return True
 
-        # Calculate turning velocity (negative because positive offset = turn right)
+        # Calculate turning velocity (negative offset = object left = turn left)
         angular_ratio = -offset_x / (self.image_width / 2.0)
-        angular_ratio = max(-1.0, min(1.0, angular_ratio))  # Clamp
+        angular_ratio = max(-1.0, min(1.0, angular_ratio))  # Clamp to [-1, 1]
         angular_vel = angular_ratio * self.turn_speed
 
         self.teleop_pub.set_velocity(linear_x=0.0, angular_z=angular_vel)
@@ -226,7 +235,7 @@ class Part2Mission(Node):
         Move forward/backward to achieve ideal grabbing distance.
         Returns True if at correct distance, False otherwise.
         """
-        bbox_error = yolo_data.bbox_w - self.target_bbox
+        bbox_error = yolo_data.bbox_w - self.target_bbox_width
 
         if abs(bbox_error) <= self.bbox_tolerance:
             self.stop_base()
@@ -279,7 +288,7 @@ class Part2Mission(Node):
         goal.trajectory = trajectory
 
         future = self.arm_client.send_goal_async(goal)
-        self.get_logger().info(f"📤 Sent arm trajectory: {positions}")
+        self.get_logger().info(f"Sent arm trajectory: {positions}")
         return future
 
     def send_gripper_command(self, position: float):
@@ -302,7 +311,7 @@ class Part2Mission(Node):
 
         future = self.gripper_client.send_goal_async(goal)
         action = "Opening" if position > 0 else "Closing"
-        self.get_logger().info(f"🤏 {action} gripper (pos={position})")
+        self.get_logger().info(f"{action} gripper (pos={position})")
         return future
 
     def calculate_grab_position(self, yolo_data: YOLOData):
@@ -348,34 +357,34 @@ class Part2Mission(Node):
         """Main state machine tick (10 Hz)."""
 
         # ==================== IDLE ====================
-        if self.state == MissionState.IDLE:
+        if self.state == State.IDLE:
             if self.detection_is_fresh() and self.last_yolo_data is not None:
                 self.get_logger().info("\n" + "=" * 70)
-                self.get_logger().info("🚀 MISSION START: Bottle detected!")
+                self.get_logger().info("START: Object detected!")
                 self.get_logger().info("=" * 70)
-                self.state = MissionState.CENTERING
+                self.state = State.CENTERING
             return
 
         # ==================== CENTERING ====================
-        elif self.state == MissionState.CENTERING:
+        elif self.state == State.CENTERING:
             if not self.detection_is_fresh():
-                self.get_logger().warn("⚠️  Lost detection during centering, returning to IDLE")
+                self.get_logger().warn("Lost detection during centering, returning to IDLE")
                 self.stop_base()
-                self.state = MissionState.IDLE
+                self.state = State.IDLE
                 return
 
             if self.center_on_object(self.last_yolo_data):
                 self.get_logger().info(
-                    "✅ [CENTERING] Object centered! Moving to APPROACHING...")
-                self.state = MissionState.APPROACHING
+                    "[CENTERING] Object centered! Moving to APPROACHING...")
+                self.state = State.APPROACHING
             return
 
         # ==================== APPROACHING ====================
-        elif self.state == MissionState.APPROACHING:
+        elif self.state == State.APPROACHING:
             if not self.detection_is_fresh():
-                self.get_logger().warn("⚠️  Lost detection during approach, returning to IDLE")
+                self.get_logger().warn("Lost detection during approach, returning to IDLE")
                 self.stop_base()
-                self.state = MissionState.IDLE
+                self.state = State.IDLE
                 return
 
             # First ensure centered while approaching
@@ -386,26 +395,26 @@ class Part2Mission(Node):
             # Then approach to correct distance
             if self.approach_object(self.last_yolo_data):
                 self.get_logger().info(
-                    "✅ [APPROACHING] At grab distance! Starting GRABBING sequence...")
+                    "[APPROACHING] At grab distance! Starting GRABBING sequence...")
                 self.stop_base()
                 self.grab_step = 0
-                self.state = MissionState.GRABBING
+                self.state = State.GRABBING
             return
 
         # ==================== GRABBING ====================
-        elif self.state == MissionState.GRABBING:
+        elif self.state == State.GRABBING:
             self._execute_grab_sequence()
             return
 
         # ==================== TRANSPORTING ====================
-        elif self.state == MissionState.TRANSPORTING:
+        elif self.state == State.TRANSPORTING:
             if self.transport_start_time is None:
                 # Calculate how long to move forward
                 self.transport_duration = self.transport_distance / self.forward_speed
                 self.transport_start_time = self.get_clock().now()
 
                 self.get_logger().info(f"\n{'=' * 70}")
-                self.get_logger().info(f"🚚 [TRANSPORTING] Moving forward {self.transport_distance}m "
+                self.get_logger().info(f"[TRANSPORTING] Moving forward {self.transport_distance}m "
                                        f"(~{self.transport_duration:.1f}s)")
                 self.get_logger().info(f"{'=' * 70}")
 
@@ -419,34 +428,34 @@ class Part2Mission(Node):
 
                 if elapsed >= self.transport_duration:
                     self.stop_base()
-                    self.get_logger().info(f"✅ [TRANSPORTING] Traveled {self.transport_distance}m! "
+                    self.get_logger().info(f"[TRANSPORTING] Traveled {self.transport_distance}m! "
                                            f"Starting RELEASING sequence...")
                     self.release_step = 0
-                    self.state = MissionState.RELEASING
+                    self.state = State.RELEASING
                 else:
                     remaining = self.transport_duration - elapsed
                     if int(remaining) != int(remaining + 0.1):  # Log every second
                         self.get_logger().info(
-                            f"🚚 Transporting... {remaining:.0f}s remaining")
+                            f"Transporting... {remaining:.0f}s remaining")
             return
 
         # ==================== RELEASING ====================
-        elif self.state == MissionState.RELEASING:
+        elif self.state == State.RELEASING:
             self._execute_release_sequence()
             return
 
         # ==================== DONE ====================
-        elif self.state == MissionState.DONE:
+        elif self.state == State.DONE:
             self.get_logger().info("\n" + "=" * 70)
-            self.get_logger().info("🎉 MISSION COMPLETE!")
+            self.get_logger().info("COMPLETE!")
             self.get_logger().info("Object successfully grabbed and transported 1 meter!")
             self.get_logger().info("=" * 70 + "\n")
 
-            # Reset for next mission
+            # Reset for next
             self.last_yolo_data = None
             self.last_detection_time = None
             self.transport_start_time = None
-            self.state = MissionState.IDLE
+            self.state = State.IDLE
             return
 
     def _execute_grab_sequence(self):
@@ -526,9 +535,9 @@ class Part2Mission(Node):
                        self.step_start_time).nanoseconds / 1e9
             if elapsed >= 2.5:
                 self.get_logger().info(
-                    "✅ [GRAB] Object grabbed! Moving to TRANSPORTING...")
+                    "[GRAB] Object grabbed! Moving to TRANSPORTING...")
                 self.grab_step = 0
-                self.state = MissionState.TRANSPORTING
+                self.state = State.TRANSPORTING
 
     def _execute_release_sequence(self):
         """Multi-step release sequence."""
@@ -583,13 +592,13 @@ class Part2Mission(Node):
             elapsed = (self.get_clock().now() -
                        self.step_start_time).nanoseconds / 1e9
             if elapsed >= 2.5:
-                self.get_logger().info("✅ [RELEASE] Release complete!")
+                self.get_logger().info("[RELEASE] Release complete!")
                 self.release_step = 0
-                self.state = MissionState.DONE
+                self.state = State.DONE
 
     def shutdown(self):
         """Clean shutdown."""
-        self.get_logger().info("Shutting down Part 2 Mission...")
+        self.get_logger().info("Shutting down Part 2...")
         self.stop_base()
         self.timer.cancel()
         self.teleop_pub.shutdown()
@@ -599,12 +608,12 @@ def main(args=None):
     rclpy.init(args=args)
     node = None
     try:
-        node = Part2Mission()
+        node = Part2()
         rclpy.spin(node)
     except KeyboardInterrupt:
-        print("\n🛑 Mission interrupted by user")
+        print("Interrupted by user")
     except Exception as e:
-        print(f"❌ Error in Part 2 Mission: {e}")
+        print(f"Error in Part 2: {e}")
         import traceback
         traceback.print_exc()
     finally:

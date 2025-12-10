@@ -3,7 +3,7 @@ import subprocess
 
 class EspeakBackend():
 
-    def __call__(self, text: str)  -> bool:
+    def __call__(self, text: str) -> bool:
         try:
             subprocess.run(
                 ["espeak", "-s", "140", text],

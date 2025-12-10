@@ -2,15 +2,15 @@
 
 ## Overview
 
-This implementation completes the Part 2 requirement: **autonomous bottle grabbing and 1-meter transport**.
+This implementation completes the Part 2 requirement: **autonomous object grabbing and 1-meter transport**.
 
 The robot will:
-1. **Detect** the bottle using YOLO object detection
-2. **Center** on the bottle by rotating the base
-3. **Approach** the bottle by moving forward to optimal grabbing distance
-4. **Grab** the bottle using the OpenManipulator-X arm and gripper
-5. **Transport** the bottle forward by 1 meter (3.2 feet)
-6. **Release** the bottle and return to home position
+1. **Detect** target objects (bottles, cups, etc.) using YOLO object detection
+2. **Center** on the object by rotating the base
+3. **Approach** the object by moving forward to optimal grabbing distance
+4. **Grab** the object using the OpenManipulator-X arm and gripper
+5. **Transport** the object forward by 1 meter (3.2 feet)
+6. **Release** the object and return to home position
 
 ## Architecture
 
@@ -22,7 +22,7 @@ The robot will:
    - Coordinates base movement and arm manipulation
 
 2. **`yolo_publisher.py`** - Object detection node
-   - Publishes real-time bottle detections with bounding box data
+   - Publishes real-time object detections with bounding box data
    - Provides visual feedback window (optional)
 
 3. **`TeleopPublisher`** - Unified control interface
@@ -34,7 +34,7 @@ The robot will:
 
 ```
 IDLE
-  ↓ (bottle detected)
+  ↓ (object detected)
 CENTERING
   ↓ (object centered in frame)
 APPROACHING
@@ -56,7 +56,7 @@ RELEASING
 DONE → IDLE
 ```
 
-## Running Part 2
+## Usage
 
 
 **Step 1: Start hardware controllers (on TurtleBot)**
@@ -78,44 +78,47 @@ source install/setup.bash
 ros2 launch milestone6 part2.launch.py
 ```
 
-**Step 3: Place bottle at edge of camera view**
+**Step 3: Place target object at edge of camera view**
 - The robot will automatically detect and execute the mission
 - Monitor progress in the terminal output
 
-## Configuration Parameters
+## Launch Configuration
 
-### All Available Parameters
+### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `target_class` | int | 39 | COCO class ID (39=bottle, 41=cup) |
-| `image_width` | int | 500 | Camera image width (pixels) |
-| `image_height` | int | 320 | Camera image height (pixels) |
+| `tracking_classes` | string | '39' | Comma-separated COCO class IDs (39=bottle, 41=cup) |
+| `image_width` | int | 1280 | Camera image width (pixels) |
+| `image_height` | int | 720 | Camera image height (pixels) |
+| `bbox_tolerance` | int | 20 | Acceptable bbox width range (pixels) |
 | `center_tolerance` | int | 30 | Centering tolerance (pixels) |
 | `target_bbox_width` | int | 180 | Ideal bbox width for grabbing (pixels) |
-| `bbox_tolerance` | int | 20 | Acceptable bbox width range (pixels) |
 | `forward_speed` | float | 0.15 | Linear velocity (m/s) |
 | `turn_speed` | float | 1.0 | Angular velocity (rad/s) |
+| `detection_timeout` | float | 0.5 | Detection timeout (seconds) |
 | `transport_distance` | float | 1.0 | Transport distance (meters) |
-| `detection_timeout` | float | 1.0 | Detection timeout (seconds) |
 
-### Launch Parameter Examples
+### Examples
 
 ```bash
 # Track cups instead of bottles
-ros2 launch milestone6 part2_complete.launch.py target_class:=41
+ros2 launch milestone6 part2.launch.py tracking_classes:='41'
+
+# Track both bottles and cups
+ros2 launch milestone6 part2.launch.py tracking_classes:='39,41'
 
 # Disable YOLO display
-ros2 launch milestone6 part2_complete.launch.py display:=false
+ros2 launch milestone6 part2.launch.py display:=false
 
 # Transport 0.5m instead of 1m
-ros2 launch milestone6 part2_complete.launch.py transport_distance:=0.5
+ros2 launch milestone6 part2.launch.py transport_distance:=0.5
 
 # Adjust speeds
-ros2 launch milestone6 part2_complete.launch.py forward_speed:=0.2 turn_speed:=1.2
+ros2 launch milestone6 part2.launch.py forward_speed:=0.2 turn_speed:=1.2
 
 # Fine-tune centering
-ros2 launch milestone6 part2_complete.launch.py center_tolerance:=20 target_bbox_width:=200
+ros2 launch milestone6 part2.launch.py center_tolerance:=20 target_bbox_width:=200
 ```
 
 ## Troubleshooting
@@ -140,7 +143,7 @@ ros2 topic hz /joint_states
 # If not, restart hardware controllers
 ```
 
-**3. Robot doesn't detect bottle**
+**3. Robot doesn't detect target object**
 ```bash
 # Check YOLO output
 ros2 topic echo /yolo_topic
@@ -148,13 +151,16 @@ ros2 topic echo /yolo_topic
 # Verify camera
 ros2 run milestone6 yolo_publisher --ros-args -p display:=true
 
+# Check if correct class is being tracked
+ros2 param get /part2 tracking_classes
+
 # Check lighting and object visibility
 ```
 
 **4. Robot moves too fast/slow**
 ```bash
 # Adjust speeds
-ros2 launch milestone6 part2_complete.launch.py \
+ros2 launch milestone6 part2.launch.py \
   forward_speed:=0.1 \
   turn_speed:=0.8
 ```
@@ -162,7 +168,7 @@ ros2 launch milestone6 part2_complete.launch.py \
 **5. Centering is imprecise**
 ```bash
 # Reduce tolerance for tighter centering
-ros2 launch milestone6 part2_complete.launch.py \
+ros2 launch milestone6 part2.launch.py \
   center_tolerance:=20
 ```
 

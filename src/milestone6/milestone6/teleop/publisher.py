@@ -1,37 +1,37 @@
+from rclpy.node import Node
 import rclpy
-from rclpy.action import ActionClient
-
-from geometry_msgs.msg import Twist
-from control_msgs.action import GripperCommand, FollowJointTrajectory
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from std_srvs.srv import Trigger
 from builtin_interfaces.msg import Duration
+from control_msgs.action import FollowJointTrajectory, GripperCommand
+from geometry_msgs.msg import Twist
+from rclpy.action import ActionClient
+from std_srvs.srv import Trigger
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 from .constants import (
-    SERVO_START_SRV,
-    SERVO_STOP_SRV,
-    BASE_TWIST_TOPIC,
     ARM_JOINT_TOPIC,
-    GRIPPER_ACTION,
-    ROS_QUEUE_SIZE,
-    BASE_LINEAR_VEL_MAX,
-    BASE_LINEAR_VEL_STEP,
     BASE_ANGULAR_VEL_MAX,
     BASE_ANGULAR_VEL_STEP,
-    JOINT_NAMES,
-    TRAJ_TIME_S,
-    GRIPPER_OPEN_POSITION,
+    BASE_LINEAR_VEL_MAX,
+    BASE_LINEAR_VEL_STEP,
+    BASE_TWIST_TOPIC,
+    GRIPPER_ACTION,
     GRIPPER_CLOSE_POSITION,
+    GRIPPER_OPEN_POSITION,
+    JOINT_NAMES,
+    ROS_QUEUE_SIZE,
+    SERVO_START_SRV,
+    SERVO_STOP_SRV,
+    TRAJ_TIME_S,
 )
 
 
 class TeleopPublisher:
     """
     Publisher for TurtleBot3 + OpenManipulatorX teleoperation.
-    
+
     Publishes velocity commands, arm trajectories, and gripper commands.
     Follows the publisher pattern similar to YOLOPublisher.
-    
+
     Based on turtlebot3_manipulation_teleop:
     - https://github.com/ROBOTIS-GIT/turtlebot3_manipulation/blob/humble/turtlebot3_manipulation_teleop/
     """
@@ -39,27 +39,30 @@ class TeleopPublisher:
     def __init__(self, node):
         """
         Initialize the teleop publisher.
-        
+
         Args:
             node: The parent ROS2 Node instance
             joint_state_subscriber: Optional JointStateSubscriber for arm control
         """
         self._node = node
-        
+
         # Create service clients for MoveIt servo
         self.servo_start_client = node.create_client(Trigger, SERVO_START_SRV)
         self.servo_stop_client = node.create_client(Trigger, SERVO_STOP_SRV)
-        
+
         # Create publishers
-        self.base_twist_pub = node.create_publisher(Twist, BASE_TWIST_TOPIC, ROS_QUEUE_SIZE)
-        
+        self.base_twist_pub = node.create_publisher(
+            Twist, BASE_TWIST_TOPIC, ROS_QUEUE_SIZE)
+
         # Create action clients
-        self.arm_traj_ac = ActionClient(node, FollowJointTrajectory, ARM_JOINT_TOPIC)
-        self.gripper_client = ActionClient(node, GripperCommand, GRIPPER_ACTION)
+        self.arm_traj_ac = ActionClient(
+            node, FollowJointTrajectory, ARM_JOINT_TOPIC)
+        self.gripper_client = ActionClient(
+            node, GripperCommand, GRIPPER_ACTION)
 
         # Create timer for publishing velocity commands
         self.pub_timer = node.create_timer(0.01, self.publish_loop)
-        
+
         # Current velocity command
         self.cmd_vel = Twist()
 
@@ -118,7 +121,7 @@ class TeleopPublisher:
     def set_velocity(self, linear_x: float = 0.0, angular_z: float = 0.0):
         """
         Set velocity command directly.
-        
+
         Args:
             linear_x: Linear velocity in x direction (m/s)
             angular_z: Angular velocity around z axis (rad/s)
@@ -132,31 +135,39 @@ class TeleopPublisher:
 
     def inc_linear(self):
         """Increase linear velocity."""
-        self.cmd_vel.linear.x = min(self.cmd_vel.linear.x + BASE_LINEAR_VEL_STEP, BASE_LINEAR_VEL_MAX)
+        self.cmd_vel.linear.x = min(
+            self.cmd_vel.linear.x + BASE_LINEAR_VEL_STEP, BASE_LINEAR_VEL_MAX)
         self.cmd_vel.linear.y = 0.0
         self.cmd_vel.linear.z = 0.0
-        self._node.get_logger().debug(f'Linear velocity: {self.cmd_vel.linear.x:.3f}')
+        self._node.get_logger().debug(
+            f'Linear velocity: {self.cmd_vel.linear.x:.3f}')
 
     def dec_linear(self):
         """Decrease linear velocity."""
-        self.cmd_vel.linear.x = max(self.cmd_vel.linear.x - BASE_LINEAR_VEL_STEP, -BASE_LINEAR_VEL_MAX)
+        self.cmd_vel.linear.x = max(
+            self.cmd_vel.linear.x - BASE_LINEAR_VEL_STEP, -BASE_LINEAR_VEL_MAX)
         self.cmd_vel.linear.y = 0.0
         self.cmd_vel.linear.z = 0.0
-        self._node.get_logger().debug(f'Linear velocity: {self.cmd_vel.linear.x:.3f}')
+        self._node.get_logger().debug(
+            f'Linear velocity: {self.cmd_vel.linear.x:.3f}')
 
     def inc_ang(self):
         """Increase angular velocity."""
         self.cmd_vel.angular.x = 0.0
         self.cmd_vel.angular.y = 0.0
-        self.cmd_vel.angular.z = min(self.cmd_vel.angular.z + BASE_ANGULAR_VEL_STEP, BASE_ANGULAR_VEL_MAX)
-        self._node.get_logger().debug(f'Angular velocity: {self.cmd_vel.angular.z:.3f}')
+        self.cmd_vel.angular.z = min(
+            self.cmd_vel.angular.z + BASE_ANGULAR_VEL_STEP, BASE_ANGULAR_VEL_MAX)
+        self._node.get_logger().debug(
+            f'Angular velocity: {self.cmd_vel.angular.z:.3f}')
 
     def dec_ang(self):
         """Decrease angular velocity."""
         self.cmd_vel.angular.x = 0.0
         self.cmd_vel.angular.y = 0.0
-        self.cmd_vel.angular.z = max(self.cmd_vel.angular.z - BASE_ANGULAR_VEL_STEP, -BASE_ANGULAR_VEL_MAX)
-        self._node.get_logger().debug(f'Angular velocity: {self.cmd_vel.angular.z:.3f}')
+        self.cmd_vel.angular.z = max(
+            self.cmd_vel.angular.z - BASE_ANGULAR_VEL_STEP, -BASE_ANGULAR_VEL_MAX)
+        self._node.get_logger().debug(
+            f'Angular velocity: {self.cmd_vel.angular.z:.3f}')
 
     def stop(self):
         """Stop the base."""
@@ -165,7 +176,7 @@ class TeleopPublisher:
     def send_gripper_goal(self, position: float):
         """
         Send gripper command.
-        
+
         Args:
             position (float): Gripper position in meters
                              positive to open (~0.025), negative to close (~-0.015)
@@ -191,7 +202,7 @@ class TeleopPublisher:
     def send_arm_trajectory(self, target_positions: dict):
         """
         Send arm trajectory goal.
-        
+
         Args:
             target_positions: Dictionary mapping joint names to target positions (radians)
         """
@@ -227,25 +238,23 @@ class TeleopPublisher:
         return self._node.get_logger()
 
 
-from rclpy.node import Node
-
-
 class TeleopPublisherNode(Node):
     """
     Standalone TeleopPublisher Node.
-    
+
     Publishes base velocity commands, arm trajectories, and gripper commands.
     Can be used as a centralized teleop service for other nodes.
     """
+
     def __init__(self):
         super().__init__('teleop_publisher')
         self.get_logger().info("Starting TeleopPublisher Node...")
-        
+
         # Initialize the publisher (using self as the node)
         self.publisher = TeleopPublisher(self)
-        
+
         self.get_logger().info("TeleopPublisher Node ready.")
-    
+
     def shutdown(self):
         """Shutdown the node."""
         self.get_logger().info('Shutting down TeleopPublisher Node...')

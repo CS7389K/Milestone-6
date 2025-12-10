@@ -28,7 +28,7 @@ Optional Parameters:
     image_width:=<int>          Camera width (default: 500)
     image_height:=<int>         Camera height (default: 320)
     display:=<bool>             Show YOLO window (default: true)
-    target_class:=<int>         COCO class ID (default: 39 for bottle)
+    tracking_classes:=<str>     Comma-separated COCO class IDs (default: '39' for bottle)
     center_tolerance:=<int>     Centering tolerance px (default: 30)
     target_bbox_width:=<int>    Ideal bbox width (default: 180)
     forward_speed:=<float>      Linear velocity m/s (default: 0.15)
@@ -37,7 +37,10 @@ Optional Parameters:
 
 Examples:
     # Track cups instead of bottles
-    ros2 launch milestone6 part2_complete.launch.py target_class:=41
+    ros2 launch milestone6 part2_complete.launch.py tracking_classes:='41'
+    
+    # Track both bottles and cups
+    ros2 launch milestone6 part2_complete.launch.py tracking_classes:='39,41'
     
     # Disable YOLO display window
     ros2 launch milestone6 part2_complete.launch.py display:=false
@@ -54,7 +57,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     """Generate launch description for Part 2 mission."""
-    
+
     # Declare launch arguments
     yolo_model_arg = DeclareLaunchArgument(
         'yolo_model',
@@ -64,13 +67,13 @@ def generate_launch_description():
 
     image_width_arg = DeclareLaunchArgument(
         'image_width',
-        default_value='500',
+        default_value='1280',
         description='Camera image width in pixels'
     )
 
     image_height_arg = DeclareLaunchArgument(
         'image_height',
-        default_value='320',
+        default_value='720',
         description='Camera image height in pixels'
     )
 
@@ -80,10 +83,10 @@ def generate_launch_description():
         description='Display YOLO detection window'
     )
 
-    target_class_arg = DeclareLaunchArgument(
-        'target_class',
+    tracking_classes_arg = DeclareLaunchArgument(
+        'tracking_classes',
         default_value='39',
-        description='COCO class ID to track (39=bottle, 41=cup)'
+        description='Comma-separated COCO class IDs to track (e.g., "39,41" for bottle and cup)'
     )
 
     center_tolerance_arg = DeclareLaunchArgument(
@@ -118,7 +121,7 @@ def generate_launch_description():
 
     detection_timeout_arg = DeclareLaunchArgument(
         'detection_timeout',
-        default_value='1.0',
+        default_value='0.5',
         description='Detection timeout in seconds'
     )
 
@@ -143,16 +146,16 @@ def generate_launch_description():
         name='part2',
         output='screen',
         parameters=[{
-            'target_class': LaunchConfiguration('target_class'),
+            'tracking_classes': LaunchConfiguration('tracking_classes'),
             'image_width': LaunchConfiguration('image_width'),
             'image_height': LaunchConfiguration('image_height'),
+            'bbox_tolerance': 20,
             'center_tolerance': LaunchConfiguration('center_tolerance'),
             'target_bbox_width': LaunchConfiguration('target_bbox_arg'),
-            'bbox_tolerance': 20,
             'forward_speed': LaunchConfiguration('forward_speed'),
             'turn_speed': LaunchConfiguration('turn_speed'),
-            'transport_distance': LaunchConfiguration('transport_distance'),
             'detection_timeout': LaunchConfiguration('detection_timeout'),
+            'transport_distance': LaunchConfiguration('transport_distance'),
         }]
     )
 
@@ -162,7 +165,7 @@ def generate_launch_description():
         image_width_arg,
         image_height_arg,
         display_arg,
-        target_class_arg,
+        tracking_classes_arg,
         center_tolerance_arg,
         target_bbox_arg,
         forward_speed_arg,

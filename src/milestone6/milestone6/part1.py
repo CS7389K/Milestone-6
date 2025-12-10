@@ -38,38 +38,41 @@ class TeleopBase(Node):
 
     def __init__(self):
         super().__init__('teleop_base')
+
+        # ------------------- Parameters -------------------
+        # Comma-separated COCO class IDs
+        self.declare_parameter('tracking_classes', '39')
+        self.declare_parameter('image_width', 1280)
         self.declare_parameter('move_wheels', True)
-
-        self.declare_parameter('image_width', 500)
-        self.declare_parameter('image_height', 320)
-        self.declare_parameter('tolerance', 30)  # Reduced for better centering
-        # Stop when object this wide (px)
-        self.declare_parameter('min_bbox_width', 150)
-        # Ideal bbox width for manipulation
-        self.declare_parameter('target_bbox_width', 180)
-        # Acceptable range around target
         self.declare_parameter('bbox_tolerance', 20)
-        self.declare_parameter('forward_speed', 0.15)
-        # Reduced for smoother turning
-        self.declare_parameter('turn_speed', 1.2)
-        self.declare_parameter('track_class', 39)  # Default to "bottle"
+        self.declare_parameter('center_tolerance', 30) # pixels
+        self.declare_parameter('target_bbox_width', 180)  # pixels
+        self.declare_parameter('forward_speed', 0.15)  # m/s
+        self.declare_parameter('turn_speed', 1.0)  # rad/s
+        self.declare_parameter('detection_timeout', 0.5)  # seconds
 
+
+        tracking_classes = self.get_parameter('tracking_classes').value
+        self.image_width = self.get_parameter('image_width').value
         self._move_wheels = self.get_parameter('move_wheels').value
+        self.bbox_tolerance = self.get_parameter('bbox_tolerance').value
+        self.center_tolerance = self.get_parameter('center_tolerance').value
+        self.target_bbox_width = self.get_parameter('target_bbox_width').value
+        self.forward_speed = self.get_parameter('forward_speed').value
+        self.turn_speed = self.get_parameter('turn_speed').value
+        self.detection_timeout = self.get_parameter('detection_timeout').value
 
-        self._image_width = self.get_parameter('image_width').value
-        self._image_height = self.get_parameter('image_height').value
-        self._tolerance = self.get_parameter('tolerance').value
-        self._bbox_threshold = self.get_parameter('min_bbox_width').value
-        self._target_bbox = self.get_parameter('target_bbox_width').value
-        self._bbox_tolerance = self.get_parameter('bbox_tolerance').value
-        self._forward_speed = self.get_parameter('forward_speed').value
-        self._turn_speed = self.get_parameter('turn_speed').value
-        self._track_class = self.get_parameter('track_class').value
+        # Parse tracking classes from comma-separated string
+        self.tracking_classes = [
+            int(c.strip()) for c in tracking_classes.split(',') if c.strip()]
 
-        class_name = COCO_CLASSES.get(self._track_class, 'unknown')
+        # Get class names from COCO dataset
+        class_names = [COCO_CLASSES.get(cls, f'unknown({cls})') \
+                       for cls in self.tracking_classes]
+        class_list_str = ', '.join([f'{name} (ID: {cls})' for name, cls in zip(class_names, self.tracking_classes)])
+
         self.get_logger().info("Initializing TeleopBase Node...")
-        self.get_logger().info(
-            f"Tracking COCO class: '{class_name}' (ID: {self._track_class})")
+        self.get_logger().info(f"Tracking COCO classes: {class_list_str}")
 
         # Initialize teleop publisher (handles all movement commands)
         if self._move_wheels:
@@ -83,8 +86,7 @@ class TeleopBase(Node):
         self.yolo_subscriber = YOLOSubscriber(self, self._yolo_callback)
 
         # Track when we last saw the target object
-        self._last_detection_time = None
-        self._detection_timeout = 0.5  # Stop robot if no detection for 0.5 seconds
+        self.last_detection_time = None
 
         # Move-wait-update behavior: prevent oscillation
         self._last_command_time = None
@@ -114,14 +116,14 @@ class TeleopBase(Node):
             self.get_logger().debug(
                 f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
 
-            if data.clz != self._track_class:
+            if data.clz not in self.tracking_classes:
                 self.get_logger().debug(
-                    f"Ignoring class {data.clz}, looking for {self._track_class}")
+                    f"Ignoring class {data.clz}, looking for {self.tracking_classes}")
                 return
 
             # Update detection timestamp
             current_time = self.get_clock().now()
-            self._last_detection_time = current_time
+            self.last_detection_time = current_time
 
             # Move-wait-update: Skip if we recently sent a command (waiting for new detection)
             if self._last_command_time is not None:
@@ -139,7 +141,7 @@ class TeleopBase(Node):
             self._last_command_time = current_time
 
             # Calculate image center
-            image_center_x = self._image_width / 2.0
+            image_center_x = self.image_width / 2.0
 
             # Calculate horizontal offset from center
             offset_x = bbox_center_x - image_center_x
@@ -147,11 +149,11 @@ class TeleopBase(Node):
             # Determine angular velocity (turn towards object)
             # Positive offset (object on right) -> turn right (negative angular)
             # Negative offset (object on left) -> turn left (positive angular)
-            if abs(offset_x) > self._tolerance:
+            if abs(offset_x) > self.center_tolerance:
                 # Normalize offset to [-1, 1] range
-                angular_ratio = -offset_x / (self._image_width / 2.0)
+                angular_ratio = -offset_x / (self.image_width / 2.0)
                 angular_ratio = max(-1.0, min(1.0, angular_ratio))  # clamp
-                angular_vel = angular_ratio * self._turn_speed
+                angular_vel = angular_ratio * self.turn_speed
                 self.get_logger().debug(
                     f"Turning: offset={offset_x:.1f}px, angular_vel={angular_vel:.3f} rad/s")
             else:
@@ -159,35 +161,35 @@ class TeleopBase(Node):
                 self.get_logger().debug("Object centered horizontally")
 
             # Determine linear velocity (move forward/backward to maintain target distance)
-            bbox_error = data.bbox_w - self._target_bbox
+            bbox_error = data.bbox_w - self.target_bbox_width
 
-            if abs(bbox_error) <= self._bbox_tolerance:
+            if abs(bbox_error) <= self.bbox_tolerance:
                 # Perfect distance - object is within target range
                 linear_vel = 0.0
                 self.get_logger().info(
                     f"✓ At target distance! bbox={data.bbox_w:.0f}px "
-                    f"(target={self._target_bbox}±{self._bbox_tolerance}px)"
+                    f"(target={self.target_bbox_width}±{self.bbox_tolerance}px)"
                 )
                 # At target distance - allow turning to center
                 # angular_vel already calculated above
-            elif bbox_error < -self._bbox_tolerance:
+            elif bbox_error < -self.bbox_tolerance:
                 # Object too small (too far) - move forward
                 # Scale speed based on error magnitude
                 distance_ratio = min(1.0, abs(bbox_error) / 100.0)
-                linear_vel = self._forward_speed * distance_ratio
+                linear_vel = self.forward_speed * distance_ratio
                 # IMPORTANT: Don't turn while moving forward/backward
                 angular_vel = 0.0
                 self.get_logger().debug(
-                    f"Moving forward: bbox={data.bbox_w:.0f}px < target={self._target_bbox}px "
+                    f"Moving forward: bbox={data.bbox_w:.0f}px < target={self.target_bbox_width}px "
                     f"(error={bbox_error:.0f}px, speed={linear_vel:.2f})"
                 )
             else:
                 # Object too large (too close) - move backward slowly
-                linear_vel = -self._forward_speed * 0.3  # Slower backward movement
+                linear_vel = -self.forward_speed * 0.3  # Slower backward movement
                 # IMPORTANT: Don't turn while moving forward/backward
                 angular_vel = 0.0
                 self.get_logger().debug(
-                    f"Too close, backing up: bbox={data.bbox_w:.0f}px > target={self._target_bbox}px "
+                    f"Too close, backing up: bbox={data.bbox_w:.0f}px > target={self.target_bbox_width}px "
                     f"(error={bbox_error:.0f}px)"
                 )
 
@@ -198,19 +200,19 @@ class TeleopBase(Node):
 
     def _check_target_lost(self):
         """Stop robot if target hasn't been detected recently."""
-        if self._last_detection_time is None:
+        if self.last_detection_time is None:
             return  # Haven't detected anything yet
 
         time_since_detection = (self.get_clock().now(
-        ) - self._last_detection_time).nanoseconds / 1e9
-        if time_since_detection > self._detection_timeout:
+        ) - self.last_detection_time).nanoseconds / 1e9
+        if time_since_detection > self.detection_timeout:
             # Target lost, stop the robot
             if self._is_moving:
                 self.teleop.set_velocity(linear_x=0.0, angular_z=0.0)
                 self.get_logger().debug(
                     f"Target lost for {time_since_detection:.2f}s, stopping robot")
                 self._is_moving = False
-            self._last_detection_time = None  # Reset so we don't spam logs
+            self.last_detection_time = None  # Reset so we don't spam logs
             self._last_command_time = None  # Allow immediate response when target reappears
 
     def shutdown(self):

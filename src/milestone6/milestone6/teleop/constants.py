@@ -28,11 +28,11 @@ TRAJ_TIME_S = 0.6  # seconds to reach each nudge
 POSES = {
     # Home pose - safe retracted position (tested by ROBOTIS)
     "home": {"joint1": 0.0, "joint2": -1.05, "joint3": 0.35, "joint4": 0.70},
-    
+
     # Init pose - forward reach for manipulation (~22cm forward, ~18cm high)
     # Expected bbox width at this distance: ~180px for 7cm bottle
     "init": {"joint1": 0.0, "joint2": -1.57, "joint3": 1.37, "joint4": 0.26},
-    
+
     # Zero pose - all joints straight
     "zero": {"joint1": 0.0, "joint2": 0.0, "joint3": 0.0, "joint4": 0.0},
 }
