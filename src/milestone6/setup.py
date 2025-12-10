@@ -1,6 +1,7 @@
-from setuptools import setup
 import os
 from glob import glob
+
+from setuptools import setup
 
 package_name = 'milestone6'
 
@@ -12,6 +13,7 @@ setup(
         f'{package_name}.teleop',
         f'{package_name}.yolo',
         f'{package_name}.api',
+        f'{package_name}.util',
     ],
     data_files=[
         ('share/ament_index/resource_index/packages',
