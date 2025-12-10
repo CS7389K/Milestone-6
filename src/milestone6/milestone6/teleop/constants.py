@@ -23,11 +23,19 @@ JOINT_NAMES = ("joint1", "joint2", "joint3", "joint4")
 JOINT_STEP = 0.05  # radians per key press
 TRAJ_TIME_S = 0.6  # seconds to reach each nudge
 
-# Predefined arm poses
+# Predefined arm poses (tested safe positions)
 POSES = {
-    "home": {"joint1": 0.0, "joint2": -0.4, "joint3": -0.4, "joint4": 0.0},
-    "extend": {"joint1": 0.0, "joint2": -0.5, "joint3": -0.5, "joint4": 0.0},
-    "custom": {"joint1": 0.3, "joint2": 0.2, "joint3": -0.2, "joint4": 0.0},
+    # ROBOTIS reference home pose - safe retracted position
+    "home": {"joint1": 0.0, "joint2": -1.05, "joint3": 0.35, "joint4": 0.70},
+    
+    # Hardware-calibrated grip pose for bottle manipulation at 144px bbox width
+    "grip": {"joint1": 0.0, "joint2": 0.640, "joint3": 0.260, "joint4": 0.0},
+    
+    # Zero pose - all joints straight
+    "zero": {"joint1": 0.0, "joint2": 0.0, "joint3": 0.0, "joint4": 0.0},
+    
+    # Init pose from ROBOTIS reference
+    "init": {"joint1": 0.0, "joint2": -1.57, "joint3": 1.37, "joint4": 0.26},
 }
 
 # Gripper positions

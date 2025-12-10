@@ -36,28 +36,33 @@ Parameters:
 """
 
 import math
-import time
 from enum import Enum
 
 import rclpy
 from rclpy.node import Node
+from rclpy.action import ActionClient
+from action_msgs.msg import GoalStatus
 
 from milestone6.yolo.subscriber import YOLOSubscriber
 from milestone6.yolo.yolo_data import YOLOData
 
 from milestone6.teleop.publisher import TeleopPublisher
 from milestone6.teleop.subscriber import TeleopSubscriber
+from milestone6.teleop.constants import POSES
 from milestone6.coco import COCO_CLASSES
 
 
 class ArmMissionState(Enum):
     WAITING = 1
-    PREPARING = 3
-    GRABBING = 4
-    HOLDING = 5
-    MOVING = 6
-    RELEASING = 7
-    DONE = 8
+    REACHING = 2      # Extending arm to bottle
+    GRIPPING = 3      # Closing gripper
+    LIFTING = 4       # Lifting bottle
+    HOLDING = 5       # Holding briefly
+    MOVING = 6        # Moving forward
+    PLACING = 7       # Lowering to place
+    RELEASING = 8     # Opening gripper
+    RETRACTING = 9    # Pulling arm back
+    DONE = 10
 
 
 class TeleopArmV1(Node):
@@ -119,7 +124,13 @@ class TeleopArmV1(Node):
         # State machine
         self.state = ArmMissionState.WAITING
 
-        # Timing
+        # Action tracking for trajectory completion
+        self.trajectory_goal_handle = None
+        self.trajectory_complete = False
+        self.gripper_goal_handle = None
+        self.gripper_complete = False
+        
+        # Timing for hold and move states
         self.hold_start_time = None
         self.move_start_time = None
 
@@ -156,13 +167,8 @@ class TeleopArmV1(Node):
         """
 
         if not self.teleop_sub.have_joint_states:
-            # Safe fallback if joint states are not ready
-            return {
-                'joint1': 0.0,
-                'joint2': -1.05,
-                'joint3': 0.35,
-                'joint4': 0.70
-            }
+            # Safe fallback if joint states are not ready - use home pose
+            return POSES["home"].copy()
 
         # Object center
         obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
@@ -175,37 +181,110 @@ class TeleopArmV1(Node):
         desired_joint1 = norm_x * (camera_hfov_rad / 2.0)
         joint1 = max(-1.5, min(1.5, desired_joint1))
 
-        # *** CALIBRATED POSE FROM HARDWARE TESTING ***
+        # Use hardware-calibrated grip pose from constants
         # These values were empirically determined to successfully grip bottles
-        # at the target approach distance (bbox_width ≈ 180px)
-        joint2 = 0.640  # Calibrated shoulder angle
-        joint3 = 0.260  # Calibrated elbow angle
-        joint4 = 0.000  # Calibrated wrist angle
+        # at the target approach distance (bbox_width ≈ 144px)
+        grip_pose = POSES["grip"].copy()
+        grip_pose['joint1'] = joint1  # Adjust yaw to face object
         
-        self.get_logger().info(f"Using CALIBRATED pose (bbox={yolo_data.bbox_w:.0f}px)")
+        self.get_logger().info(f"Using CALIBRATED grip pose (bbox={yolo_data.bbox_w:.0f}px)")
 
-        pose = {
-            'joint1': joint1,
-            'joint2': joint2,
-            'joint3': joint3,
-            'joint4': joint4
-        }
+        pose = grip_pose
         
         # Safety check: Prevent forbidden configurations too close to base
         # These configurations can cause self-collision or hardware damage
-        if abs(joint1) < 0.05 and joint2 > 0.5:  # Forward reach while centered
+        if abs(pose['joint1']) < 0.05 and pose['joint2'] > 0.5:  # Forward reach while centered
             self.get_logger().warn("SAFETY: Clamping joint2 to avoid base collision")
             pose['joint2'] = 0.5
         
-        if joint2 > 0.8:  # Too far down
+        if pose['joint2'] > 0.8:  # Too far down
             self.get_logger().warn("SAFETY: Clamping joint2 to avoid over-extension")
             pose['joint2'] = 0.8
         
-        if joint3 < -0.5:  # Too far extended
+        if pose['joint3'] < -0.5:  # Too far extended
             self.get_logger().warn("SAFETY: Clamping joint3 to avoid over-extension")
             pose['joint3'] = -0.5
         
         return pose
+
+    # ------------------------------------------------------------------
+    # Action callbacks
+    # ------------------------------------------------------------------
+    def _trajectory_done_callback(self, future):
+        """Callback when arm trajectory action completes."""
+        self.trajectory_goal_handle = future.result()
+        if self.trajectory_goal_handle.accepted:
+            result_future = self.trajectory_goal_handle.get_result_async()
+            result_future.add_done_callback(self._trajectory_result_callback)
+    
+    def _trajectory_result_callback(self, future):
+        """Callback when trajectory result is available."""
+        result = future.result()
+        if result.status == GoalStatus.STATUS_SUCCEEDED:
+            self.trajectory_complete = True
+            self.get_logger().info("Trajectory completed successfully")
+        else:
+            self.get_logger().error(f"Trajectory failed with status: {result.status}")
+            self.trajectory_complete = True  # Move on anyway
+    
+    def _gripper_done_callback(self, future):
+        """Callback when gripper action completes."""
+        self.gripper_goal_handle = future.result()
+        if self.gripper_goal_handle.accepted:
+            result_future = self.gripper_goal_handle.get_result_async()
+            result_future.add_done_callback(self._gripper_result_callback)
+    
+    def _gripper_result_callback(self, future):
+        """Callback when gripper result is available."""
+        result = future.result()
+        if result.status == GoalStatus.STATUS_SUCCEEDED:
+            self.gripper_complete = True
+            self.get_logger().info("Gripper command completed")
+        else:
+            self.get_logger().error(f"Gripper failed with status: {result.status}")
+            self.gripper_complete = True  # Move on anyway
+
+    # ------------------------------------------------------------------
+    # Helper methods for sending actions
+    # ------------------------------------------------------------------
+    def send_arm_action(self, pose_dict):
+        """Send arm trajectory and wait for completion via callback."""
+        self.trajectory_complete = False
+        future = self.teleop_pub.arm_traj_ac.send_goal_async(
+            self._create_trajectory_goal(pose_dict)
+        )
+        future.add_done_callback(self._trajectory_done_callback)
+    
+    def send_gripper_action(self, command_func):
+        """Send gripper command and wait for completion via callback."""
+        self.gripper_complete = False
+        future = command_func()  # Returns future from gripper action
+        if future:
+            future.add_done_callback(self._gripper_done_callback)
+        else:
+            self.gripper_complete = True  # If no action client, mark as complete
+    
+    def _create_trajectory_goal(self, pose_dict):
+        """Create FollowJointTrajectory goal from pose dictionary."""
+        from control_msgs.action import FollowJointTrajectory
+        from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+        from builtin_interfaces.msg import Duration
+        
+        goal = FollowJointTrajectory.Goal()
+        goal.trajectory = JointTrajectory()
+        goal.trajectory.joint_names = ['joint1', 'joint2', 'joint3', 'joint4']
+        
+        point = JointTrajectoryPoint()
+        point.positions = [
+            pose_dict['joint1'],
+            pose_dict['joint2'],
+            pose_dict['joint3'],
+            pose_dict['joint4']
+        ]
+        point.time_from_start = Duration(sec=2, nanosec=0)
+        goal.trajectory.points = [point]
+        
+        return goal
 
     # ------------------------------------------------------------------
     # State machine tick
@@ -223,7 +302,7 @@ class TeleopArmV1(Node):
                     
                     if distance_error <= self.bbox_tolerance:
                         self.get_logger().info(f"✓ At target distance (bbox={bbox_width:.0f}px). Starting manipulation...")
-                        self.set_state(ArmMissionState.PREPARING)
+                        self.set_state(ArmMissionState.REACHING)
                     else:
                         # Still approaching - let base controller handle it
                         if bbox_width < self.target_bbox_width:
@@ -236,107 +315,86 @@ class TeleopArmV1(Node):
                         )
             return
 
-        # ------------------- PREPARING -------------------
-        if self.state == ArmMissionState.PREPARING:
-            try:
-                if not self.teleop_sub.have_joint_states:
-                    self.get_logger().warn("Waiting for joint states...")
-                    return
+        # ------------------- REACHING -------------------
+        if self.state == ArmMissionState.REACHING:
+            if not self.teleop_sub.have_joint_states:
+                self.get_logger().warn("Waiting for joint states...")
+                return
 
-                self.get_logger().info("="*60)
-                self.get_logger().info("PREPARING: opening gripper and positioning arm")
-                self.get_logger().info("="*60)
-                self.teleop_pub.set_velocity(0.0, 0.0)
-
-                # Open gripper
-                self.teleop_pub.gripper_open()
-                time.sleep(1.5)
-
-                if self.last_yolo_data is None:
-                    self.object_detected = False
-                    self.set_state(ArmMissionState.WAITING)
-                    return
-
-                # Move to reach pose
-                reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
-                self.get_logger().info(
-                    f"Moving to reach pose: j1={reach_pose['joint1']:.2f}, "
-                    f"j2={reach_pose['joint2']:.2f}, j3={reach_pose['joint3']:.2f}, j4={reach_pose['joint4']:.2f}"
-                )
-                self.get_logger().info(
-                    f"Object at ({self.last_yolo_data.bbox_x:.0f}, {self.last_yolo_data.bbox_y:.0f}), "
-                    f"size {self.last_yolo_data.bbox_w:.0f}x{self.last_yolo_data.bbox_h:.0f}px"
-                )
-                self.teleop_pub.send_arm_trajectory(reach_pose)
-                time.sleep(2.5)  # More time to reach position
-
-                self.set_state(ArmMissionState.GRABBING)
-            except Exception as e:
-                self.get_logger().error(f"PREPARING failed: {e}")
+            if self.last_yolo_data is None:
                 self.object_detected = False
                 self.set_state(ArmMissionState.WAITING)
+                return
+
+            self.get_logger().info("="*60)
+            self.get_logger().info("REACHING: Extending arm to bottle")
+            self.get_logger().info("="*60)
+            self.teleop_pub.set_velocity(0.0, 0.0)
+
+            # Open gripper first
+            self.teleop_pub.gripper_open()
+            
+            # Calculate and send arm pose
+            reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
+            self.get_logger().info(
+                f"Reaching pose: j1={reach_pose['joint1']:.2f}, "
+                f"j2={reach_pose['joint2']:.2f}, j3={reach_pose['joint3']:.2f}, j4={reach_pose['joint4']:.2f}"
+            )
+            
+            # Send trajectory via action
+            self.send_arm_action(reach_pose)
+            self.set_state(ArmMissionState.GRIPPING)
             return
 
-        # ------------------- GRABBING -------------------
-        if self.state == ArmMissionState.GRABBING:
-            try:
-                self.get_logger().info("GRABBING: approach + close + lift.")
+        # ------------------- GRIPPING -------------------
+        if self.state == ArmMissionState.GRIPPING:
+            # Wait for trajectory to complete
+            if not self.trajectory_complete:
+                return
+            
+            self.get_logger().info("GRIPPING: Closing gripper on bottle")
+            self.teleop_pub.gripper_close()
+            
+            # Move to lifting immediately (gripper takes time to close)
+            self.set_state(ArmMissionState.LIFTING)
+            return
 
-                if self.last_yolo_data is None:
-                    self.object_detected = False
-                    self.set_state(ArmMissionState.WAITING)
-                    return
-
-                # CRITICAL: Use CURRENT detection, not stale data
-                reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
-
-                # Approach: Small adjustment from calibrated pose to ensure contact
-                # Your calibrated pose already reaches the bottle, so we make minimal adjustment
-                grasp_pose = {
-                    'joint1': reach_pose['joint1'],
-                    'joint2': reach_pose['joint2'] + 0.05,  # Tiny adjustment down
-                    'joint3': reach_pose['joint3'] - 0.05,  # Tiny adjustment forward
-                    'joint4': 0.0
-                }
-                self.get_logger().info(
-                    f"Approaching bottle: j1={grasp_pose['joint1']:.2f}, "
-                    f"j2={grasp_pose['joint2']:.2f} (DOWN), j3={grasp_pose['joint3']:.2f} (EXTEND)"
-                )
-                self.teleop_pub.send_arm_trajectory(grasp_pose)
-                time.sleep(2.5)  # Give time to reach
-
-                # Close gripper
-                self.get_logger().info("Closing gripper on bottle...")
-                self.teleop_pub.gripper_close()
-                time.sleep(2.0)
-
-                # Lift pose - STAY FORWARD, just retract elbow to lift
-                # DO NOT reduce joint2, that makes it go backward!
-                lift_pose = {
-                    'joint1': grasp_pose['joint1'],  # Keep same rotation
-                    'joint2': grasp_pose['joint2'],  # KEEP same forward position!
-                    'joint3': grasp_pose['joint3'] + 0.3,  # Retract elbow to lift (positive = retract/up)
-                    'joint4': 0.0
-                }
-                self.get_logger().info(
-                    f"Lifting bottle: j2={lift_pose['joint2']:.2f} (STAY FORWARD), "
-                    f"j3={lift_pose['joint3']:.2f} (RETRACT UP)"
-                )
-                self.teleop_pub.send_arm_trajectory(lift_pose)
-                time.sleep(2.0)
-
-                self.set_state(ArmMissionState.HOLDING)
-            except Exception as e:
-                self.get_logger().error(f"GRABBING failed: {e}")
+        # ------------------- LIFTING -------------------
+        if self.state == ArmMissionState.LIFTING:
+            if self.last_yolo_data is None:
                 self.object_detected = False
                 self.set_state(ArmMissionState.WAITING)
+                return
+            
+            self.get_logger().info("LIFTING: Raising bottle")
+            
+            # Calculate lift pose - retract elbow while staying forward
+            reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
+            lift_pose = {
+                'joint1': reach_pose['joint1'],
+                'joint2': reach_pose['joint2'],      # Keep same forward position
+                'joint3': reach_pose['joint3'] + 0.3,  # Retract elbow to lift
+                'joint4': 0.0
+            }
+            
+            self.get_logger().info(
+                f"Lift pose: j2={lift_pose['joint2']:.2f} (STAY FORWARD), "
+                f"j3={lift_pose['joint3']:.2f} (RETRACT UP)"
+            )
+            
+            self.send_arm_action(lift_pose)
+            self.set_state(ArmMissionState.HOLDING)
             return
 
         # ------------------- HOLDING -------------------
         if self.state == ArmMissionState.HOLDING:
+            # Wait for lift trajectory to complete
+            if not self.trajectory_complete:
+                return
+            
             if self.hold_start_time is None:
                 self.hold_start_time = self.get_clock().now()
-                self.get_logger().info("HOLDING object...")
+                self.get_logger().info("HOLDING object briefly...")
 
             elapsed = (self.get_clock().now() - self.hold_start_time).nanoseconds / 1e9
             if elapsed >= 1.5:
@@ -349,70 +407,70 @@ class TeleopArmV1(Node):
             if self.move_start_time is None:
                 self.move_start_time = self.get_clock().now()
                 self.get_logger().info("MOVING forward with object (0.5 feet / 15cm)...")
-                # Move forward at slow speed
-                self.teleop_pub.set_velocity(0.10, 0.0)  # 10 cm/s forward
+                self.teleop_pub.set_velocity(0.10, 0.0)
             
             elapsed = (self.get_clock().now() - self.move_start_time).nanoseconds / 1e9
-            # 0.5 feet = 15.24 cm, at 10 cm/s takes ~1.5 seconds
             if elapsed >= 1.5:
-                self.teleop_pub.set_velocity(0.0, 0.0)  # Stop
+                self.teleop_pub.set_velocity(0.0, 0.0)
                 self.move_start_time = None
                 self.get_logger().info("Reached destination. Placing object...")
-                self.set_state(ArmMissionState.RELEASING)
+                self.set_state(ArmMissionState.PLACING)
+            return
+
+        # ------------------- PLACING -------------------
+        if self.state == ArmMissionState.PLACING:
+            self.get_logger().info("PLACING: Lowering to placement position")
+            self.teleop_pub.set_velocity(0.0, 0.0)
+
+            # Lower to gripping position (center, no rotation)
+            if self.last_yolo_data:
+                reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
+                place_pose = POSES["grip"].copy()
+                # Keep grip height and extension, but center the base rotation
+                place_pose['joint1'] = 0.0
+            else:
+                # Fallback to centered grip pose
+                place_pose = POSES["grip"].copy()
+                place_pose['joint1'] = 0.0
+            
+            self.get_logger().info(
+                f"Place pose: j2={place_pose['joint2']:.2f}, j3={place_pose['joint3']:.2f}"
+            )
+            
+            self.send_arm_action(place_pose)
+            self.set_state(ArmMissionState.RELEASING)
             return
 
         # ------------------- RELEASING -------------------
         if self.state == ArmMissionState.RELEASING:
-            try:
-                self.get_logger().info("RELEASING: lower to gripping position + open + retract.")
-                self.teleop_pub.set_velocity(0.0, 0.0)  # Ensure stopped
+            # Wait for placement trajectory to complete
+            if not self.trajectory_complete:
+                return
+            
+            self.get_logger().info("RELEASING: Opening gripper")
+            self.teleop_pub.gripper_open()
+            
+            self.set_state(ArmMissionState.RETRACTING)
+            return
 
-                # Lower to the SAME gripping position used for pickup
-                # This ensures consistent placement height
-                if self.last_yolo_data:
-                    reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
-                    place_pose = {
-                        'joint1': 0.0,  # Centered
-                        'joint2': reach_pose['joint2'] + 0.05,  # Same as grasp height
-                        'joint3': reach_pose['joint3'] - 0.05,  # Same as grasp extension
-                        'joint4': 0.0
-                    }
-                else:
-                    # Fallback if no detection data available
-                    place_pose = {
-                        'joint1': 0.0,
-                        'joint2': 0.69,  # calibrated j2 + 0.05
-                        'joint3': 0.21,  # calibrated j3 - 0.05
-                        'joint4': 0.0
-                    }
-                
-                self.get_logger().info(
-                    f"Lowering to place position: j2={place_pose['joint2']:.2f}, j3={place_pose['joint3']:.2f}"
-                )
-                self.teleop_pub.send_arm_trajectory(place_pose)
-                time.sleep(2.0)
-
-                self.teleop_pub.gripper_open()
-                time.sleep(1.0)
-
-                retract_pose = {
-                    'joint1': 0.0,
-                    'joint2': -0.30,
-                    'joint3': 0.10,
-                    'joint4': 0.60
-                }
-                self.teleop_pub.send_arm_trajectory(retract_pose)
-                time.sleep(1.5)
-
-                self.set_state(ArmMissionState.DONE)
-            except Exception as e:
-                self.get_logger().error(f"RELEASING failed: {e}")
-                self.set_state(ArmMissionState.DONE)
+        # ------------------- RETRACTING -------------------
+        if self.state == ArmMissionState.RETRACTING:
+            self.get_logger().info("RETRACTING: Pulling arm back to safe home position")
+            
+            # Use ROBOTIS-tested home pose for safe retraction
+            retract_pose = POSES["home"].copy()
+            
+            self.send_arm_action(retract_pose)
+            self.set_state(ArmMissionState.DONE)
             return
 
         # ------------------- DONE -------------------
         if self.state == ArmMissionState.DONE:
-            self.get_logger().info("DONE: reset to WAITING.")
+            # Wait for retract to complete
+            if not self.trajectory_complete:
+                return
+            
+            self.get_logger().info("DONE: Mission complete. Resetting...")
             self.object_detected = False
             self.last_yolo_data = None
             self.last_detection_time = None
