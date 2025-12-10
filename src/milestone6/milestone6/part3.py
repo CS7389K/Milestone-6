@@ -29,9 +29,6 @@ from rclpy.node import Node
 from std_msgs.msg import String
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
-# Import backends for voice interaction
-from milestone6.milestone6.nlp.espeak import EspeakBackend
-
 # Base and Arm control
 from milestone6.teleop.publisher import TeleopPublisher
 from milestone6.teleop.subscriber import TeleopSubscriber
@@ -166,9 +163,13 @@ class Part3(Node):
         else:
             self.tracking_classes = [int(tracking_classes)]
 
-        # ------------------- Voice Backends -------------------
-        self.get_logger().info("Initializing voice backends...")
-        self.espeak = EspeakBackend()
+        # ------------------- Text-to-Speech Publisher -------------------
+        self.get_logger().info("Creating text-to-speech publisher...")
+        self.tts_publisher = self.create_publisher(
+            String,
+            '/text_to_speech',
+            10
+        )
 
         # Subscribe to audio commands from Whisper publisher
         if self.use_whisper:
@@ -266,12 +267,11 @@ class Part3(Node):
     # Voice Interaction Methods
     # ------------------------------------------------------------------
     def _speak(self, text: str):
-        """Use espeak to speak text."""
-        self.get_logger().info(f"[ESPEAK] {text}")
-        try:
-            self.espeak(text)
-        except Exception as e:
-            self.get_logger().error(f"espeak failed: {e}")
+        """Publish text to be spoken."""
+        self.get_logger().info(f"[TTS] {text}")
+        msg = String()
+        msg.data = text
+        self.tts_publisher.publish(msg)
 
     def _audio_command_callback(self, msg: String):
         """Callback for audio commands from Whisper publisher."""

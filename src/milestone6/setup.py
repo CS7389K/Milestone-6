@@ -11,6 +11,7 @@ setup(
     packages=[
         package_name,
         f'{package_name}.nlp',
+        f'{package_name}.nlp.backends',
         f'{package_name}.teleop',
         f'{package_name}.util',
         f'{package_name}.yolo',
@@ -36,6 +37,7 @@ setup(
             f"teleop_subscriber = {package_name}.teleop.subscriber:main",
             f"yolo_publisher = {package_name}.yolo.publisher:main",
             f"yolo_subscriber = {package_name}.yolo.subscriber:main",
+            f"espeak = {package_name}.nlp.espeak:main",
             f"whisper = {package_name}.nlp.whisper:main",
             f"part1 = {package_name}.part1:main",
             f"part2 = {package_name}.part2:main",

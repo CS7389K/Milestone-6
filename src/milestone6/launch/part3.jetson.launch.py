@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-Part 3 NLP Launch File (Remote PC - Whisper Only)
+Part 3 NLP Launch File (Remote PC - Whisper and Espeak)
 
 This launch file runs on a powerful remote PC and includes:
 1. Whisper Publisher - Speech-to-text transcription service
+2. Espeak Subscriber - Text-to-speech output service
 
 This node subscribes to /audio_command (receives audio file paths from TurtleBot)
 and publishes to /voice_transcription (sends transcribed text back to TurtleBot).
+
+The espeak subscriber listens to /text_to_speech and speaks the received text.
 
 The base mission (part3.base.launch.py) should be running on the TurtleBot separately.
 
@@ -21,6 +24,7 @@ Optional Parameters:
     device:=<str>           Device for Whisper (cpu or cuda, default: cpu)
     model_type:=<str>       Whisper model (tiny, base, small, medium, large, default: small)
     temperature:=<float>    Sampling temperature (default: 0.0)
+    speech_rate:=<int>      Espeak speech rate in words per minute (default: 140)
 
 Examples:
     # Use GPU acceleration
@@ -31,6 +35,9 @@ Examples:
     
     # Use tiny model for faster transcription
     ros2 launch milestone6 part3.nlp.launch.py model_type:=tiny
+    
+    # Adjust speech rate
+    ros2 launch milestone6 part3.nlp.launch.py speech_rate:=160
 """
 
 from launch import LaunchDescription
@@ -61,6 +68,12 @@ def generate_launch_description():
         description='Whisper sampling temperature'
     )
 
+    speech_rate_arg = DeclareLaunchArgument(
+        'speech_rate',
+        default_value='140',
+        description='Espeak speech rate in words per minute'
+    )
+
     # Whisper Publisher Node
     whisper_publisher_node = Node(
         package='milestone6',
@@ -74,11 +87,24 @@ def generate_launch_description():
         }]
     )
 
+    # Espeak Subscriber Node
+    espeak_subscriber_node = Node(
+        package='milestone6',
+        executable='espeak',
+        name='espeak',
+        output='screen',
+        parameters=[{
+            'speech_rate': LaunchConfiguration('speech_rate'),
+        }]
+    )
+
     return LaunchDescription([
         # Launch arguments
         device_arg,
         model_type_arg,
         temperature_arg,
-        # Whisper publisher node
-        whisper_publisher_node
+        speech_rate_arg,
+        # Nodes
+        whisper_publisher_node,
+        espeak_subscriber_node
     ])
