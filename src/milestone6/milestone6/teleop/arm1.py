@@ -82,6 +82,8 @@ class TeleopArmV1(Node):
         # base approach params (optional; you can keep base control in base.py)
         self.declare_parameter('forward_speed', 0.0)
         self.declare_parameter('turn_speed', 0.0)
+        self.declare_parameter('target_bbox_width', 180)
+        self.declare_parameter('bbox_tolerance', 15)
 
         self.target_class = int(self.get_parameter('target_class').value)
         self.detection_timeout = float(self.get_parameter('detection_timeout_sec').value)
@@ -91,6 +93,8 @@ class TeleopArmV1(Node):
 
         self.forward_speed = float(self.get_parameter('forward_speed').value)
         self.turn_speed = float(self.get_parameter('turn_speed').value)
+        self.target_bbox_width = int(self.get_parameter('target_bbox_width').value)
+        self.bbox_tolerance = int(self.get_parameter('bbox_tolerance').value)
 
         # ------------------- YOLO Subscriber -------------------
         self.get_logger().info("Starting YOLO Subscriber...")
@@ -180,12 +184,28 @@ class TeleopArmV1(Node):
         
         self.get_logger().info(f"Using CALIBRATED pose (bbox={yolo_data.bbox_w:.0f}px)")
 
-        return {
+        pose = {
             'joint1': joint1,
             'joint2': joint2,
             'joint3': joint3,
             'joint4': joint4
         }
+        
+        # Safety check: Prevent forbidden configurations too close to base
+        # These configurations can cause self-collision or hardware damage
+        if abs(joint1) < 0.05 and joint2 > 0.5:  # Forward reach while centered
+            self.get_logger().warn("SAFETY: Clamping joint2 to avoid base collision")
+            pose['joint2'] = 0.5
+        
+        if joint2 > 0.8:  # Too far down
+            self.get_logger().warn("SAFETY: Clamping joint2 to avoid over-extension")
+            pose['joint2'] = 0.8
+        
+        if joint3 < -0.5:  # Too far extended
+            self.get_logger().warn("SAFETY: Clamping joint3 to avoid over-extension")
+            pose['joint3'] = -0.5
+        
+        return pose
 
     # ------------------------------------------------------------------
     # State machine tick
@@ -197,7 +217,23 @@ class TeleopArmV1(Node):
             if self.object_detected and self.last_yolo_data is not None and self.last_detection_time:
                 elapsed = (self.get_clock().now() - self.last_detection_time).nanoseconds / 1e9
                 if elapsed < self.detection_timeout:
-                    self.set_state(ArmMissionState.PREPARING)
+                    # CHECK DISTANCE: Only start arm manipulation when at target distance
+                    bbox_width = self.last_yolo_data.bbox_w
+                    distance_error = abs(bbox_width - self.target_bbox_width)
+                    
+                    if distance_error <= self.bbox_tolerance:
+                        self.get_logger().info(f"✓ At target distance (bbox={bbox_width:.0f}px). Starting manipulation...")
+                        self.set_state(ArmMissionState.PREPARING)
+                    else:
+                        # Still approaching - let base controller handle it
+                        if bbox_width < self.target_bbox_width:
+                            status = "TOO FAR - base moving forward"
+                        else:
+                            status = "TOO CLOSE - base moving backward"
+                        self.get_logger().info(
+                            f"Waiting for approach: bbox={bbox_width:.0f}px (target={self.target_bbox_width}±{self.bbox_tolerance}px) - {status}",
+                            throttle_duration_sec=2.0
+                        )
             return
 
         # ------------------- PREPARING -------------------

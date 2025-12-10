@@ -146,7 +146,10 @@ def generate_launch_description():
         parameters=[{
             'target_class': 39,
             'detection_timeout_sec': 1.0,
-            'grab_delay_sec': 0.5,
+            'image_width': 500,
+            'image_height': 320,
+            'target_bbox_width': 180,     # Same as base - wait for this distance
+            'bbox_tolerance': 15,         # Same tolerance as base
         }]
     )
 
