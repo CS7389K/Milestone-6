@@ -21,19 +21,16 @@ Usage:
 import math
 from enum import Enum
 
-import numpy as np
 import rclpy
-import sounddevice as sd
 from builtin_interfaces.msg import Duration
 from control_msgs.action import FollowJointTrajectory, GripperCommand
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from scipy.io.wavfile import write
+from std_msgs.msg import String
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 # Import backends for voice interaction
-from milestone6.nlp.espeak import EspeakBackend
-from milestone6.nlp.whisper import WhisperBackend
+from milestone6.milestone6.nlp.backends.espeak import EspeakBackend
 
 # Base and Arm control
 from milestone6.teleop.publisher import TeleopPublisher
@@ -81,6 +78,8 @@ class Part3(Node):
         self.declare_parameter('audio_sample_rate', 16000)  # Hz
         # Amplitude threshold for voice detection
         self.declare_parameter('audio_threshold', 500)
+        # Whisper subscriber usage (true for distributed, false for local)
+        self.declare_parameter('use_whisper', True)
 
         # Part 2 parameters (visual servoing)
         self.declare_parameter('tracking_classes', '39')
@@ -126,6 +125,7 @@ class Part3(Node):
         self.audio_duration = self.get_parameter('audio_duration').value
         self.audio_sample_rate = self.get_parameter('audio_sample_rate').value
         self.audio_threshold = self.get_parameter('audio_threshold').value
+        self.use_whisper = self.get_parameter('use_whisper').value
 
         tracking_classes = self.get_parameter('tracking_classes').value
         self.image_width = self.get_parameter('image_width').value
@@ -169,7 +169,20 @@ class Part3(Node):
         # ------------------- Voice Backends -------------------
         self.get_logger().info("Initializing voice backends...")
         self.espeak = EspeakBackend()
-        self.whisper = WhisperBackend(model_type="small", device="cpu")
+
+        # Subscribe to audio commands from Whisper publisher
+        if self.use_whisper:
+            self.get_logger().info("Subscribing to /voice_transcription topic...")
+            self.audio_command_sub = self.create_subscription(
+                String,
+                '/voice_transcription',
+                self._audio_command_callback,
+                10
+            )
+            self.last_audio_command = None
+        else:
+            self.get_logger().warn("Whisper disabled - voice commands will not work!")
+            self.audio_command_sub = None
 
         # ------------------- YOLO Subscriber -------------------
         self.get_logger().info("Starting YOLO Subscriber...")
@@ -260,66 +273,10 @@ class Part3(Node):
         except Exception as e:
             self.get_logger().error(f"espeak failed: {e}")
 
-    def _listen(self) -> str:
-        """
-        Record audio using sounddevice when voice is detected and transcribe with Whisper.
-        Waits for audio above threshold before starting recording.
-        Returns transcribed text (lowercase).
-        """
-        try:
-            self.get_logger().info("[WHISPER] Listening for voice activity...")
-
-            # Wait for voice activity (threshold detection)
-            chunk_duration = 0.1  # Check every 100ms
-            chunk_samples = int(self.audio_sample_rate * chunk_duration)
-
-            # Listen for voice onset
-            voice_detected = False
-            max_wait_chunks = 100
-            for _ in range(max_wait_chunks):
-                chunk = sd.rec(
-                    chunk_samples,
-                    samplerate=self.audio_sample_rate,
-                    channels=1,
-                    dtype='int16'
-                )
-                sd.wait()
-
-                # Check if amplitude exceeds threshold
-                if np.max(np.abs(chunk)) > self.audio_threshold:
-                    voice_detected = True
-                    self.get_logger().info(
-                        "[WHISPER] Voice detected! Recording...")
-                    break
-
-            if not voice_detected:
-                self.get_logger().warn(
-                    "[WHISPER] No voice detected within timeout")
-                return ""
-
-            # Record audio for specified duration
-            audio = sd.rec(
-                int(self.audio_duration * self.audio_sample_rate),
-                samplerate=self.audio_sample_rate,
-                channels=1,
-                dtype='int16'
-            )
-            sd.wait()
-
-            # Save to file
-            write(self.audio_file, self.audio_sample_rate, audio)
-            self.get_logger().info(
-                f"[WHISPER] Recording saved to {self.audio_file}")
-
-            # Transcribe with Whisper
-            self.get_logger().info("[WHISPER] Transcribing...")
-            text = self.whisper(self.audio_file)
-            self.get_logger().info(f"[WHISPER] Heard: '{text}'")
-            return text.lower()
-
-        except Exception as e:
-            self.get_logger().error(f"Listen failed: {e}")
-            return ""
+    def _audio_command_callback(self, msg: String):
+        """Callback for audio commands from Whisper publisher."""
+        self.last_audio_command = msg.data
+        self.get_logger().info(f"[AUDIO] Received command: '{msg.data}'")
 
     def _parse_command(self, text: str) -> str:
         """
@@ -525,17 +482,11 @@ class Part3(Node):
                 self.state = State.CENTERING
                 return
 
-            # Prompt for voice command periodically
-            now = self.get_clock().now()
-            if self.last_prompt_time is None:
-                self.last_prompt_time = now
+            # Check for new audio command from topic
+            if self.last_audio_command is not None:
+                text = self.last_audio_command
+                self.last_audio_command = None  # Clear after processing
 
-            elapsed = (now - self.last_prompt_time).nanoseconds / 1e9
-            if elapsed >= self.prompt_delay:
-                self._speak("Ready for Command")
-
-                # Listen for command
-                text = self._listen()
                 cmd = self._parse_command(text)
 
                 if cmd != 'unknown':
@@ -544,6 +495,14 @@ class Part3(Node):
                     self._speak(
                         "Command not recognized. Try turn left, turn right, move forward, or scan.")
 
+            # Prompt for voice command periodically (visual feedback only)
+            now = self.get_clock().now()
+            if self.last_prompt_time is None:
+                self.last_prompt_time = now
+
+            elapsed = (now - self.last_prompt_time).nanoseconds / 1e9
+            if elapsed >= self.prompt_delay:
+                self._speak("Ready for Command")
                 self.last_prompt_time = now
 
         # ==================== EXECUTING_CMD ====================
