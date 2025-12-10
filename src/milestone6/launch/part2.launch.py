@@ -130,8 +130,8 @@ def generate_launch_description():
             'image_width': 500,
             'image_height': 320,
             'tolerance': 50,              # Horizontal centering tolerance (pixels)
-            'target_bbox_width': 144,     # Target bbox size at optimal grab distance (empirical)
-            'bbox_tolerance': 8,          # Tighter tolerance for consistent gripping
+            'target_bbox_width': 180,     # Target bbox for ROBOTIS init pose (~22cm distance)
+            'bbox_tolerance': 15,         # Tolerance for distance control
             'forward_speed': 0.12,        # Slower for precise positioning
             'turn_speed': 1.2,            # Slower turning for stability
             'track_class': 39,            # bottle
@@ -148,8 +148,8 @@ def generate_launch_description():
             'detection_timeout_sec': 1.0,
             'image_width': 500,
             'image_height': 320,
-            'target_bbox_width': 144,     # Same as base - wait for this distance
-            'bbox_tolerance': 8,          # Same tolerance as base
+            'target_bbox_width': 180,     # Match base - ROBOTIS init pose optimal distance
+            'bbox_tolerance': 15,         # Same tolerance as base
         }]
     )
 

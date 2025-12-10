@@ -23,19 +23,18 @@ JOINT_NAMES = ("joint1", "joint2", "joint3", "joint4")
 JOINT_STEP = 0.05  # radians per key press
 TRAJ_TIME_S = 0.6  # seconds to reach each nudge
 
-# Predefined arm poses (tested safe positions)
+# Predefined arm poses (ROBOTIS-tested safe positions)
+# Source: turtlebot3_manipulation opencr.cpp
 POSES = {
-    # ROBOTIS reference home pose - safe retracted position
+    # Home pose - safe retracted position (tested by ROBOTIS)
     "home": {"joint1": 0.0, "joint2": -1.05, "joint3": 0.35, "joint4": 0.70},
     
-    # Hardware-calibrated grip pose for bottle manipulation at 144px bbox width
-    "grip": {"joint1": 0.0, "joint2": 0.640, "joint3": 0.260, "joint4": 0.0},
+    # Init pose - forward reach for manipulation (~22cm forward, ~18cm high)
+    # Expected bbox width at this distance: ~180px for 7cm bottle
+    "init": {"joint1": 0.0, "joint2": -1.57, "joint3": 1.37, "joint4": 0.26},
     
     # Zero pose - all joints straight
     "zero": {"joint1": 0.0, "joint2": 0.0, "joint3": 0.0, "joint4": 0.0},
-    
-    # Init pose from ROBOTIS reference
-    "init": {"joint1": 0.0, "joint2": -1.57, "joint3": 1.37, "joint4": 0.26},
 }
 
 # Gripper positions

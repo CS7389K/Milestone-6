@@ -181,31 +181,19 @@ class TeleopArmV1(Node):
         desired_joint1 = norm_x * (camera_hfov_rad / 2.0)
         joint1 = max(-1.5, min(1.5, desired_joint1))
 
-        # Use hardware-calibrated grip pose from constants
-        # These values were empirically determined to successfully grip bottles
-        # at the target approach distance (bbox_width ≈ 144px)
-        grip_pose = POSES["grip"].copy()
-        grip_pose['joint1'] = joint1  # Adjust yaw to face object
+        # Use ROBOTIS-tested init pose for manipulation
+        # This pose reaches ~22cm forward, ~18cm high
+        # Expected bbox at this distance: ~180px for typical bottle
+        reach_pose = POSES["init"].copy()
+        reach_pose['joint1'] = joint1  # Adjust yaw to face object
         
-        self.get_logger().info(f"Using CALIBRATED grip pose (bbox={yolo_data.bbox_w:.0f}px)")
-
-        pose = grip_pose
+        self.get_logger().info(
+            f"Using ROBOTIS init pose (bbox={yolo_data.bbox_w:.0f}px): "
+            f"j1={reach_pose['joint1']:.2f}, j2={reach_pose['joint2']:.2f}, "
+            f"j3={reach_pose['joint3']:.2f}, j4={reach_pose['joint4']:.2f}"
+        )
         
-        # Safety check: Prevent forbidden configurations too close to base
-        # These configurations can cause self-collision or hardware damage
-        if abs(pose['joint1']) < 0.05 and pose['joint2'] > 0.5:  # Forward reach while centered
-            self.get_logger().warn("SAFETY: Clamping joint2 to avoid base collision")
-            pose['joint2'] = 0.5
-        
-        if pose['joint2'] > 0.8:  # Too far down
-            self.get_logger().warn("SAFETY: Clamping joint2 to avoid over-extension")
-            pose['joint2'] = 0.8
-        
-        if pose['joint3'] < -0.5:  # Too far extended
-            self.get_logger().warn("SAFETY: Clamping joint3 to avoid over-extension")
-            pose['joint3'] = -0.5
-        
-        return pose
+        return reach_pose
 
     # ------------------------------------------------------------------
     # Action callbacks
@@ -330,16 +318,9 @@ class TeleopArmV1(Node):
             self.get_logger().info("REACHING: Extending arm to bottle")
             self.get_logger().info("="*60)
             self.teleop_pub.set_velocity(0.0, 0.0)
-
-            # Open gripper first
-            self.teleop_pub.gripper_open()
             
-            # Calculate and send arm pose
+            # Calculate and send arm pose (gripper already open from previous cycle)
             reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
-            self.get_logger().info(
-                f"Reaching pose: j1={reach_pose['joint1']:.2f}, "
-                f"j2={reach_pose['joint2']:.2f}, j3={reach_pose['joint3']:.2f}, j4={reach_pose['joint4']:.2f}"
-            )
             
             # Send trajectory via action
             self.send_arm_action(reach_pose)
@@ -351,6 +332,14 @@ class TeleopArmV1(Node):
             # Wait for trajectory to complete
             if not self.trajectory_complete:
                 return
+            
+            # Open gripper first (only after arm is in position)
+            self.get_logger().info("Opening gripper at target position...")
+            self.teleop_pub.gripper_open()
+            
+            # Small delay to ensure gripper is open, then close
+            import time
+            time.sleep(0.5)
             
             self.get_logger().info("GRIPPING: Closing gripper on bottle")
             self.teleop_pub.gripper_close()
@@ -423,15 +412,9 @@ class TeleopArmV1(Node):
             self.teleop_pub.set_velocity(0.0, 0.0)
 
             # Lower to gripping position (center, no rotation)
-            if self.last_yolo_data:
-                reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
-                place_pose = POSES["grip"].copy()
-                # Keep grip height and extension, but center the base rotation
-                place_pose['joint1'] = 0.0
-            else:
-                # Fallback to centered grip pose
-                place_pose = POSES["grip"].copy()
-                place_pose['joint1'] = 0.0
+            # Use ROBOTIS init pose for placement
+            place_pose = POSES["init"].copy()
+            place_pose['joint1'] = 0.0  # Center the base rotation
             
             self.get_logger().info(
                 f"Place pose: j2={place_pose['joint2']:.2f}, j3={place_pose['joint3']:.2f}"
