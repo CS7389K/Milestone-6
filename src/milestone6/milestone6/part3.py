@@ -30,7 +30,7 @@ from std_msgs.msg import String
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 # Import backends for voice interaction
-from milestone6.milestone6.nlp.backends.espeak import EspeakBackend
+from milestone6.milestone6.nlp.espeak import EspeakBackend
 
 # Base and Arm control
 from milestone6.teleop.publisher import TeleopPublisher
