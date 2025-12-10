@@ -69,7 +69,7 @@ class Part3(Node):
         self.declare_parameter('forward_speed_voice', 0.2)  # m/s
         self.declare_parameter('audio_file', '/tmp/voice_input.wav')
         # seconds between prompts
-        self.declare_parameter('prompt_delay', 1.0)
+        self.declare_parameter('prompt_delay', 30.0)
         # Audio recording parameters
         self.declare_parameter('audio_duration', 5)        # seconds
         self.declare_parameter('audio_sample_rate', 16000)  # Hz

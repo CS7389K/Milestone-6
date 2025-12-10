@@ -195,7 +195,7 @@ def generate_launch_description():
             'turn_speed_voice': LaunchConfiguration('turn_speed_voice'),
             'forward_speed_voice': LaunchConfiguration('forward_speed_voice'),
             'audio_file': LaunchConfiguration('audio_file'),
-            'prompt_delay': 1.0,
+            'prompt_delay': 30.0,
             'audio_duration': LaunchConfiguration('audio_duration'),
             'audio_sample_rate': LaunchConfiguration('audio_sample_rate'),
             'audio_threshold': LaunchConfiguration('audio_threshold'),
