@@ -129,27 +129,16 @@ class YOLOPublisher(Node):
             input_vstream_info = self._hef.get_input_vstream_infos()[0]
             output_vstream_infos = self._hef.get_output_vstream_infos()
             
-            # Get input shape and check batch size
+            # Get input shape
             shape = input_vstream_info.shape
-            if len(shape) == 4:
-                self._batch_size, self._model_height, self._model_width, self._model_channels = shape
-            elif len(shape) == 3:
-                self._model_height, self._model_width, self._model_channels = shape
-                self._batch_size = 1
-            else:
-                self._model_height, self._model_width, self._model_channels = shape[0], shape[1], shape[2]
-                self._batch_size = 1
+            self._model_height, self._model_width, self._model_channels = shape[0], shape[1], shape[2]
             
-            # Check if batch size is abnormal (likely compilation issue)
-            if self._batch_size > 1:
-                # Calculate expected batch from memory requirements
-                single_frame_size = self._model_height * self._model_width * self._model_channels
-                # This is a workaround - in production you need batch_size=1 HEF
-                self._actual_batch_size = 640  # Known from error message
-                self.get_logger().warn(f"HEF compiled with batch_size={self._actual_batch_size}. Will replicate frames (SLOW!).")
-                self.get_logger().warn("For production: recompile HEF with batch_size=1")
-            else:
-                self._actual_batch_size = 1
+            # CRITICAL: This HEF is compiled with batch_size=640
+            # We determined this from the error: Expected 786432000 bytes = 640 * 1228800 bytes
+            self._actual_batch_size = 640
+            
+            self.get_logger().warn(f"HEF requires batch_size={self._actual_batch_size}. Will replicate single frame (SLOW!).")
+            self.get_logger().warn("For production: recompile HEF with batch_size=1 for 100x speedup")
             
             # Store for later use
             self._input_vstream_info = input_vstream_info
@@ -257,12 +246,9 @@ class YOLOPublisher(Node):
         # Convert BGR to RGB - keep as UINT8 (0-255)
         input_data = cv2.cvtColor(input_frame, cv2.COLOR_BGR2RGB)
         
-        # WORKAROUND: If batch size > 1, replicate the frame
-        if self._actual_batch_size > 1:
-            # Stack the same frame batch_size times: [H,W,C] -> [batch,H,W,C]
-            input_batch = np.stack([input_data] * self._actual_batch_size, axis=0)
-        else:
-            input_batch = input_data
+        # WORKAROUND: Replicate the frame 640 times for batched inference
+        # This is wasteful but necessary with current HEF compilation
+        input_batch = np.stack([input_data] * self._actual_batch_size, axis=0)
         
         # Run inference using simple async API
         with self._network_group.activate():
@@ -411,13 +397,7 @@ class YOLOPublisher(Node):
         """Clean up resources."""
         self.get_logger().info("Shutting down YOLO Publisher...")
         
-        # Release Hailo resources
-        if hasattr(self, '_network_group'):
-            try:
-                self._network_group.release()
-            except Exception as e:
-                self.get_logger().warn(f"Error releasing network group: {e}")
-        
+        # Release Hailo resources (VDevice handles network group cleanup)
         if hasattr(self, '_vdevice'):
             try:
                 self._vdevice.release()
