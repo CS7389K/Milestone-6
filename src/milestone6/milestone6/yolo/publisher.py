@@ -27,7 +27,7 @@ import numpy as np
 from hailo_platform import HEF, VDevice, InferVStreams, InputVStreamParams, OutputVStreamParams, FormatType
 
 from .yolo_data import YOLOData
-from .coco import COCO_CLASSES
+from ..coco import COCO_CLASSES
 
 
 class YOLOPublisher(Node):
