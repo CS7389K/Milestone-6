@@ -50,8 +50,7 @@ Examples:
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, RegisterEventHandler
-from launch.event_handlers import OnProcessStart
+from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -175,11 +174,5 @@ def generate_launch_description():
         detection_timeout_arg,
         # Nodes
         yolo_publisher_node,
-        # Wait for YOLO publisher to start before launching mission node
-        RegisterEventHandler(
-            OnProcessStart(
-                target_action=yolo_publisher_node,
-                on_start=[mission_node]
-            )
-        ),
+        mission_node
     ])
