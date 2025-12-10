@@ -95,7 +95,7 @@ def generate_launch_description():
         description='Centering tolerance in pixels'
     )
 
-    target_bbox_arg = DeclareLaunchArgument(
+    target_bbox_width_arg = DeclareLaunchArgument(
         'target_bbox_width',
         default_value='180',
         description='Ideal bounding box width for grabbing in pixels'
@@ -151,7 +151,7 @@ def generate_launch_description():
             'image_height': LaunchConfiguration('image_height'),
             'bbox_tolerance': 20,
             'center_tolerance': LaunchConfiguration('center_tolerance'),
-            'target_bbox_width': LaunchConfiguration('target_bbox_arg'),
+            'target_bbox_width': LaunchConfiguration('target_bbox_width'),
             'forward_speed': LaunchConfiguration('forward_speed'),
             'turn_speed': LaunchConfiguration('turn_speed'),
             'detection_timeout': LaunchConfiguration('detection_timeout'),
@@ -167,7 +167,7 @@ def generate_launch_description():
         display_arg,
         tracking_classes_arg,
         center_tolerance_arg,
-        target_bbox_arg,
+        target_bbox_width_arg,
         forward_speed_arg,
         turn_speed_arg,
         transport_distance_arg,
