@@ -223,12 +223,14 @@ class TeleopArmV1(Node):
                     self.get_logger().warn("Waiting for joint states...")
                     return
 
-                self.get_logger().info("PREPARING: open gripper and move to reach pose.")
+                self.get_logger().info("="*60)
+                self.get_logger().info("PREPARING: opening gripper and positioning arm")
+                self.get_logger().info("="*60)
                 self.teleop_pub.set_velocity(0.0, 0.0)
 
                 # Open gripper
                 self.teleop_pub.gripper_open()
-                time.sleep(1.0)
+                time.sleep(1.5)
 
                 if self.last_yolo_data is None:
                     self.object_detected = False
@@ -237,8 +239,16 @@ class TeleopArmV1(Node):
 
                 # Move to reach pose
                 reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
+                self.get_logger().info(
+                    f"Moving to reach pose: j1={reach_pose['joint1']:.2f}, "
+                    f"j2={reach_pose['joint2']:.2f}, j3={reach_pose['joint3']:.2f}, j4={reach_pose['joint4']:.2f}"
+                )
+                self.get_logger().info(
+                    f"Object at ({self.last_yolo_data.bbox_x:.0f}, {self.last_yolo_data.bbox_y:.0f}), "
+                    f"size {self.last_yolo_data.bbox_w:.0f}x{self.last_yolo_data.bbox_h:.0f}px"
+                )
                 self.teleop_pub.send_arm_trajectory(reach_pose)
-                time.sleep(1.8)
+                time.sleep(2.5)  # More time to reach position
 
                 self.set_state(ArmMissionState.GRABBING)
             except Exception as e:
@@ -250,7 +260,7 @@ class TeleopArmV1(Node):
         # ------------------- GRABBING -------------------
         if self.state == ArmMissionState.GRABBING:
             try:
-                self.get_logger().info("GRABBING: small approach + close + lift.")
+                self.get_logger().info("GRABBING: approach + close + lift.")
 
                 if self.last_yolo_data is None:
                     self.object_detected = False
@@ -259,29 +269,32 @@ class TeleopArmV1(Node):
 
                 reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
 
-                # Slightly extend elbow for "final reach"
+                # Extend further to actually reach the object (subtract from joint3 to extend more)
                 grasp_pose = {
                     'joint1': reach_pose['joint1'],
-                    'joint2': reach_pose['joint2'],
-                    'joint3': min(1.5, reach_pose['joint3'] + 0.10),
+                    'joint2': reach_pose['joint2'] + 0.15,  # Reach down/forward more
+                    'joint3': reach_pose['joint3'] - 0.15,  # Extend elbow more (negative = extend)
                     'joint4': reach_pose['joint4']
                 }
+                self.get_logger().info(f"Approaching: j2={grasp_pose['joint2']:.2f}, j3={grasp_pose['joint3']:.2f}")
                 self.teleop_pub.send_arm_trajectory(grasp_pose)
-                time.sleep(1.5)
+                time.sleep(2.0)  # Give more time to reach
 
                 # Close gripper
+                self.get_logger().info("Closing gripper...")
                 self.teleop_pub.gripper_close()
-                time.sleep(1.5)
+                time.sleep(2.0)  # Give time to grip
 
-                # Lift pose (safe retract)
+                # Lift pose - keep forward position but lift up slightly
                 lift_pose = {
                     'joint1': reach_pose['joint1'],
-                    'joint2': -0.50,
-                    'joint3': 0.40,
-                    'joint4': 0.60
+                    'joint2': max(0.0, reach_pose['joint2'] - 0.2),  # Lift up slightly (reduce forward)
+                    'joint3': reach_pose['joint3'] + 0.1,  # Retract elbow slightly
+                    'joint4': 0.0  # Keep level
                 }
+                self.get_logger().info(f"Lifting: j2={lift_pose['joint2']:.2f}, j3={lift_pose['joint3']:.2f}")
                 self.teleop_pub.send_arm_trajectory(lift_pose)
-                time.sleep(1.5)
+                time.sleep(2.0)
 
                 self.set_state(ArmMissionState.HOLDING)
             except Exception as e:
