@@ -1,4 +1,5 @@
 import os
+from glob import glob
 
 from setuptools import setup
 
@@ -19,12 +20,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), [
-            'launch/part1.launch.py',
-            'launch/part2.launch.py',
-            'launch/part3.jetson.launch.py',
-            'launch/part3.tb3.launch.py',
-        ]),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
