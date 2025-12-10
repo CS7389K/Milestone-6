@@ -160,19 +160,41 @@ class TeleopArmV1(Node):
 
         # Object center
         obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
+        obj_center_y = yolo_data.bbox_y + (yolo_data.bbox_h / 2.0)
 
         # Normalize to [-1, 1]
         norm_x = (obj_center_x - (self.image_width / 2.0)) / (self.image_width / 2.0)
+        norm_y = (obj_center_y - (self.image_height / 2.0)) / (self.image_height / 2.0)
 
-        # Approx camera HFOV mapping
+        # Approx camera HFOV mapping for base rotation
         camera_hfov_rad = math.radians(62.0)
         desired_joint1 = norm_x * (camera_hfov_rad / 2.0)
-        joint1 = max(-math.pi, min(math.pi, desired_joint1))
+        joint1 = max(-1.5, min(1.5, desired_joint1))
 
-        # Validated reach pose (ROBOTIS known-good)
-        joint2 = -1.05
-        joint3 = 0.35
-        joint4 = 0.70
+        # FORWARD REACHING POSE (positive joint2 = down/forward, negative joint3 = extend)
+        # Adjust based on bbox size (larger = closer)
+        bbox_width_normalized = yolo_data.bbox_w / self.image_width
+        
+        if bbox_width_normalized > 0.35:  # Very close
+            joint2 = 0.3
+            joint3 = -0.2
+            joint4 = 0.0
+            self.get_logger().info(f"VERY CLOSE (bbox={yolo_data.bbox_w:.0f}px)")
+        elif bbox_width_normalized > 0.25:  # Close
+            joint2 = 0.5
+            joint3 = -0.3
+            joint4 = 0.0
+            self.get_logger().info(f"CLOSE (bbox={yolo_data.bbox_w:.0f}px)")
+        else:  # Far
+            joint2 = 0.7
+            joint3 = -0.4
+            joint4 = 0.0
+            self.get_logger().info(f"FAR (bbox={yolo_data.bbox_w:.0f}px)")
+        
+        # Adjust for vertical position
+        if norm_y > 0.3:  # Object low in frame
+            joint2 += 0.2
+            self.get_logger().info(f"Object LOW in frame, reaching down more")
 
         return {
             'joint1': joint1,
