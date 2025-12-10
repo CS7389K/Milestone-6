@@ -27,11 +27,11 @@ from milestone6.yolo.yolo_data import YOLOData
 
 class TeleopBase(Node):
     """
-    TeleopBase Node for autonomous base (wheel) control.
+    TeleopBase Node for Part 1: Visual Servoing (Centering Only).
 
-    Integrates YOLO object detection with teleoperation control
-    to enable autonomous navigation towards detected objects.
-    Uses TeleopPublisher for continuous base movement commands.
+    Implements visual servoing to continuously track and center on a detected bottle.
+    The robot rotates to keep the target object centered in the camera frame.
+    Does NOT approach the object - only maintains centered alignment.
 
     Message Types: https://docs.ros2.org/foxy/api/std_msgs/index-msg.html
     """
@@ -91,10 +91,6 @@ class TeleopBase(Node):
 
         # Track when we last saw the target object
         self.last_detection_time = None
-
-        # Move-wait-update behavior: prevent oscillation
-        self._last_command_time = None
-        self._command_cooldown = 0.3  # Wait 300ms after each command for YOLO update
         self._is_moving = False
 
         # Create timer to check for lost target
@@ -104,103 +100,57 @@ class TeleopBase(Node):
 
     def _yolo_callback(self, data: YOLOData):
         """
-        Process YOLO detection and move robot towards detected object.
+        Process YOLO detection and implement visual servoing (centering only).
 
-        Strategy:
+        Part 1 Strategy:
         - Calculate bbox center position
         - If object is left of center: turn left (positive angular.z)
         - If object is right of center: turn right (negative angular.z)
-        - If object is small (far): move forward
-        - If object is large (close): stop
+        - If object is centered: stop turning
+        - NO forward/backward movement (Part 1 is centering only)
 
         Args:
             data: YOLOData object containing detection information
         """
-        if self._move_wheels:
+        if not self._move_wheels:
+            return
+
+        # Filter by tracking classes
+        if data.clz not in self.tracking_classes:
             self.get_logger().debug(
-                f"YOLO Detection - Class: {data.clz}, BBox: ({data.bbox_x:.1f}, {data.bbox_y:.1f}, {data.bbox_w:.1f}, {data.bbox_h:.1f})")
+                f"Ignoring class {data.clz}, looking for {self.tracking_classes}")
+            return
 
-            if data.clz not in self.tracking_classes:
-                self.get_logger().debug(
-                    f"Ignoring class {data.clz}, looking for {self.tracking_classes}")
-                return
+        # Update detection timestamp
+        self.last_detection_time = self.get_clock().now()
 
-            # Update detection timestamp
-            current_time = self.get_clock().now()
-            self.last_detection_time = current_time
+        # Calculate bounding box center
+        bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
+        image_center_x = self.image_width / 2.0
+        offset_x = bbox_center_x - image_center_x
 
-            # Move-wait-update: Skip if we recently sent a command (waiting for new detection)
-            if self._last_command_time is not None:
-                time_since_command = (
-                    current_time - self._last_command_time).nanoseconds / 1e9
-                if time_since_command < self._command_cooldown:
-                    return  # Still in cooldown, wait for more detections
-            self.get_logger().debug(
-                f"Detected target class {data.clz}! Processing movement...")
-
-            # Calculate bounding box center
-            bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
-
-            # Record that we're processing this detection
-            self._last_command_time = current_time
-
-            # Calculate image center
-            image_center_x = self.image_width / 2.0
-
-            # Calculate horizontal offset from center
-            offset_x = bbox_center_x - image_center_x
-
-            # Determine angular velocity (turn towards object)
-            # Positive offset (object on right) -> turn right (negative angular)
-            # Negative offset (object on left) -> turn left (positive angular)
-            if abs(offset_x) > self.center_tolerance:
-                # Normalize offset to [-1, 1] range
-                angular_ratio = -offset_x / (self.image_width / 2.0)
-                angular_ratio = max(-1.0, min(1.0, angular_ratio))  # clamp
-                angular_vel = angular_ratio * self.turn_speed
-                self.get_logger().debug(
-                    f"Turning: offset={offset_x:.1f}px, angular_vel={angular_vel:.3f} rad/s")
-            else:
-                angular_vel = 0.0
-                self.get_logger().debug("Object centered horizontally")
-
-            # Determine linear velocity (move forward/backward to maintain target distance)
-            bbox_error = data.bbox_w - self.target_bbox_width
-
-            if abs(bbox_error) <= self.bbox_tolerance:
-                # Perfect distance - object is within target range
-                linear_vel = 0.0
+        # Visual Servoing: Center the object in frame
+        if abs(offset_x) <= self.center_tolerance:
+            # Object is centered - stop turning
+            if self._is_moving:
+                self.teleop.set_velocity(linear_x=0.0, angular_z=0.0)
                 self.get_logger().info(
-                    f"✓ At target distance! bbox={data.bbox_w:.0f}px "
-                    f"(target={self.target_bbox_width}±{self.bbox_tolerance}px)"
-                )
-                # At target distance - allow turning to center
-                # angular_vel already calculated above
-            elif bbox_error < -self.bbox_tolerance:
-                # Object too small (too far) - move forward
-                # Scale speed based on error magnitude
-                distance_ratio = min(1.0, abs(bbox_error) / 100.0)
-                linear_vel = self.forward_speed * distance_ratio
-                # IMPORTANT: Don't turn while moving forward/backward
-                angular_vel = 0.0
-                self.get_logger().debug(
-                    f"Moving forward: bbox={data.bbox_w:.0f}px < target={self.target_bbox_width}px "
-                    f"(error={bbox_error:.0f}px, speed={linear_vel:.2f})"
-                )
-            else:
-                # Object too large (too close) - move backward slowly
-                linear_vel = -self.forward_speed * 0.3  # Slower backward movement
-                # IMPORTANT: Don't turn while moving forward/backward
-                angular_vel = 0.0
-                self.get_logger().debug(
-                    f"Too close, backing up: bbox={data.bbox_w:.0f}px > target={self.target_bbox_width}px "
-                    f"(error={bbox_error:.0f}px)"
-                )
+                    f"✓ Object centered! (offset={offset_x:.1f}px, tolerance={self.center_tolerance}px)")
+                self._is_moving = False
+        else:
+            # Object is off-center - turn to center it
+            # Proportional control: turn speed proportional to offset
+            # Negative offset (left) -> positive angular (turn left)
+            # Positive offset (right) -> negative angular (turn right)
+            angular_ratio = -offset_x / (self.image_width / 2.0)
+            angular_ratio = max(-1.0, min(1.0, angular_ratio))  # Clamp to [-1, 1]
+            angular_vel = angular_ratio * self.turn_speed
 
-            # Update teleop velocity command
-            self.teleop.set_velocity(
-                linear_x=linear_vel, angular_z=angular_vel)
-            self._is_moving = (linear_vel != 0.0 or angular_vel != 0.0)
+            self.teleop.set_velocity(linear_x=0.0, angular_z=angular_vel)
+            direction = "left" if offset_x < 0 else "right"
+            self.get_logger().debug(
+                f"Centering: object {direction} by {abs(offset_x):.1f}px, turning at {angular_vel:.2f} rad/s")
+            self._is_moving = True
 
     def _check_target_lost(self):
         """Stop robot if target hasn't been detected recently."""
@@ -213,11 +163,10 @@ class TeleopBase(Node):
             # Target lost, stop the robot
             if self._is_moving:
                 self.teleop.set_velocity(linear_x=0.0, angular_z=0.0)
-                self.get_logger().debug(
+                self.get_logger().warn(
                     f"Target lost for {time_since_detection:.2f}s, stopping robot")
                 self._is_moving = False
             self.last_detection_time = None  # Reset so we don't spam logs
-            self._last_command_time = None  # Allow immediate response when target reappears
 
     def shutdown(self):
         """Clean shutdown of the server."""
