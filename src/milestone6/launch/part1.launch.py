@@ -23,12 +23,26 @@ Optional Parameters:
     turn_speed:=<float>    Angular velocity (default: 1.5)
 """
 
+
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     """Generate launch description with YOLO publisher, TeleopPublisher, and TeleopBase nodes."""
+    # Declare launch arguments for YOLO publisher
+    yolo_args = [
+        DeclareLaunchArgument('yolo_model', default_value='yolo11n.pt'),
+        DeclareLaunchArgument('image_width', default_value='500'),
+        DeclareLaunchArgument('image_height', default_value='320'),
+        DeclareLaunchArgument('display', default_value='true'),
+        DeclareLaunchArgument('camera_backend', default_value='gstreamer'),
+        DeclareLaunchArgument('camera_device', default_value='1'),
+        DeclareLaunchArgument('gstreamer_pipeline', default_value=''),
+    ]
+
     # YOLO Publisher Node
     yolo_publisher_node = Node(
         package='milestone6',
@@ -36,10 +50,13 @@ def generate_launch_description():
         name='yolo_publisher',
         output='screen',
         parameters=[{
-            'yolo_model': 'yolo11n.pt',
-            'image_width': 500,
-            'image_height': 320,
-            'display': True,
+            'yolo_model': LaunchConfiguration('yolo_model'),
+            'image_width': LaunchConfiguration('image_width'),
+            'image_height': LaunchConfiguration('image_height'),
+            'display': LaunchConfiguration('display'),
+            'camera_backend': LaunchConfiguration('camera_backend'),
+            'camera_device': LaunchConfiguration('camera_device'),
+            'gstreamer_pipeline': LaunchConfiguration('gstreamer_pipeline'),
         }]
     )
     # Teleop Publisher Node
@@ -64,12 +81,13 @@ def generate_launch_description():
             'forward_speed': 0.15,
             'turn_speed': 1.5,
             'track_class': 39,  # bottle
-    
-    
+
+
         }]
     )
 
     return LaunchDescription([
+        *yolo_args,
         teleop_publisher_node,
         yolo_publisher_node,
         base_node,
