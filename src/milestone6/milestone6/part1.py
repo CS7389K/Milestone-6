@@ -25,9 +25,9 @@ from milestone6.yolo.subscriber import YOLOSubscriber
 from milestone6.yolo.yolo_data import YOLOData
 
 
-class TeleopBase(Node):
+class Part1(Node):
     """
-    TeleopBase Node for Part 1: Visual Servoing (Centering Only).
+    Part 1: Visual Servoing (Centering Only).
 
     Implements visual servoing to continuously track and center on a detected bottle.
     The robot rotates to keep the target object centered in the camera frame.
@@ -75,7 +75,7 @@ class TeleopBase(Node):
         class_list_str = ', '.join(
             [f'{name} (ID: {cls})' for name, cls in zip(class_names, self.tracking_classes)])
 
-        self.get_logger().info("Initializing TeleopBase Node...")
+        self.get_logger().info("Initializing Part1 Node...")
         self.get_logger().info(f"Tracking COCO classes: {class_list_str}")
 
         # Initialize teleop publisher (handles all movement commands)
@@ -96,7 +96,7 @@ class TeleopBase(Node):
         # Create timer to check for lost target
         self.check_timer = self.create_timer(0.1, self._check_target_lost)
 
-        self.get_logger().info("TeleopBase Node has been started.")
+        self.get_logger().info("Part 1 Node has been started.")
 
     def _yolo_callback(self, data: YOLOData):
         """
@@ -143,7 +143,8 @@ class TeleopBase(Node):
             # Negative offset (left) -> positive angular (turn left)
             # Positive offset (right) -> negative angular (turn right)
             angular_ratio = -offset_x / (self.image_width / 2.0)
-            angular_ratio = max(-1.0, min(1.0, angular_ratio))  # Clamp to [-1, 1]
+            # Clamp to [-1, 1]
+            angular_ratio = max(-1.0, min(1.0, angular_ratio))
             angular_vel = angular_ratio * self.turn_speed
 
             self.teleop.set_velocity(linear_x=0.0, angular_z=angular_vel)
@@ -170,7 +171,7 @@ class TeleopBase(Node):
 
     def shutdown(self):
         """Clean shutdown of the server."""
-        self.get_logger().debug("Shutting down TeleopBase...")
+        self.get_logger().debug("Shutting down Part 1...")
         self.check_timer.cancel()
         if self._move_wheels:
             self.teleop.shutdown()
@@ -181,12 +182,12 @@ def main(args=None):
 
     server = None
     try:
-        server = TeleopBase()
+        server = Part1()
         rclpy.spin(server)
     except KeyboardInterrupt:
-        print("\nShutting down TeleopBase...")
+        print("\nShutting down Part 1...")
     except Exception as e:
-        print(f"Error in TeleopBase: {e}")
+        print(f"Error in Part 1: {e}")
     finally:
         if server:
             server.shutdown()
