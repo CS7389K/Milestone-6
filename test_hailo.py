@@ -39,20 +39,20 @@ try:
     for i, info in enumerate(input_infos):
         print(f"  Input {i}: {info.name}")
         print(f"    Shape: {info.shape}")
-        print(f"    Format: {info.format}")
-        print(f"    Data bytes: {info.data_bytes}")
     
     input_info = input_infos[0]
     
-    # Parse shape - Hailo typically uses NHWC format
+    # Parse shape - Hailo typically uses HWC format (no batch in shape)
     shape = input_info.shape
     if len(shape) == 4:
         batch_size, model_height, model_width, channels = shape
-    else:
+    elif len(shape) == 3:
         model_height, model_width, channels = shape
-        batch_size = 1
+        batch_size = 1  # Will add batch dimension manually
+    else:
+        raise ValueError(f"Unexpected shape format: {shape}")
     
-    print(f"\n  Parsed: batch={batch_size}, h={model_height}, w={model_width}, c={channels}")
+    print(f"\n  Parsed: h={model_height}, w={model_width}, c={channels} (will use batch=1)")
     
     # Configure network
     configure_params = ConfigureParams.create_from_hef(hef, interface=HailoStreamInterface.PCIe)
