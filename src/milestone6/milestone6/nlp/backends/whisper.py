@@ -1,4 +1,4 @@
-import milestone6.milestone6.nlp.backends.whisper as whisper
+import whisper
 
 
 class WhisperBackend():
@@ -10,7 +10,7 @@ class WhisperBackend():
         temperature: float = 0.0
     ):
         # Initialize Whisper model
-        self.whisper = whisper.load_model(
+        self.model = whisper.load_model(
             model_type, 
             device=device,
             in_memory=True,
@@ -21,7 +21,7 @@ class WhisperBackend():
         self,
         file_name: str
     ) -> str:
-        result = self.whisper.transcribe(
+        result = self.model.transcribe(
             file_name,
             temperature=self.temperature
         )

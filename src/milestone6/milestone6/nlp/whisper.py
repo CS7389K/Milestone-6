@@ -15,7 +15,7 @@ from rclpy.node import Node
 from scipy.io.wavfile import write
 from std_msgs.msg import String
 
-from milestone6.milestone6.nlp.backends.whisper import WhisperBackend
+from milestone6.nlp.backends.whisper import WhisperBackend
 
 
 class WhisperPublisher(Node):
@@ -54,21 +54,27 @@ class WhisperPublisher(Node):
             10
         )
 
+        # Audio recording parameters
+        self.declare_parameter('audio_sample_rate', 16000)
+        self.declare_parameter('audio_duration', 5.0)
+        self.declare_parameter('audio_threshold', 500)
+        self.declare_parameter('audio_file', '/tmp/whisper_audio.wav')
+        
+        self.audio_sample_rate = self.get_parameter('audio_sample_rate').value
+        self.audio_duration = self.get_parameter('audio_duration').value
+        self.audio_threshold = self.get_parameter('audio_threshold').value
+        self.audio_file = self.get_parameter('audio_file').value
+
         # Create timer to periodically listen for audio
         self.timer = self.create_timer(timer_period, self._listen)
 
-        self.get_logger().info("Whisper Publisher ready! Waiting for audio files...")
+        self.get_logger().info("Whisper Publisher ready! Listening for audio...")
 
-    def _listen(self) -> str:
+    def _listen(self):
         """
-        Record audio using sounddevice when voice is detected and request transcription.
+        Record audio using sounddevice when voice is detected and transcribe it.
         Waits for audio above threshold before starting recording.
-        Returns transcribed text (lowercase) or empty string if Whisper disabled.
         """
-        if not self.use_whisper or self.whisper_sub is None:
-            self.get_logger().warn("Whisper disabled - cannot listen for commands")
-            return ""
-
         try:
             self.get_logger().info("[WHISPER] Listening for voice activity...")
 
@@ -96,9 +102,9 @@ class WhisperPublisher(Node):
                     break
 
             if not voice_detected:
-                self.get_logger().warn(
+                self.get_logger().debug(
                     "[WHISPER] No voice detected within timeout")
-                return ""
+                return
 
             # Record audio for specified duration
             audio = sd.rec(
@@ -114,34 +120,22 @@ class WhisperPublisher(Node):
             self.get_logger().info(
                 f"[WHISPER] Recording saved to {self.audio_file}")
 
-            # Request transcription from Whisper publisher
-            self.get_logger().info("[WHISPER] Requesting transcription...")
-            self.whisper_sub.request_transcription(self.audio_file)
+            # Transcribe the audio
+            self.get_logger().info("[WHISPER] Transcribing...")
+            text = self.whisper(self.audio_file).strip().lower()
 
-            # Wait for transcription response (with timeout)
-            timeout_counter = 0
-            max_wait = 100  # 10 seconds at 10Hz tick rate
-            while self.whisper_sub.is_waiting() and timeout_counter < max_wait:
-                rclpy.spin_once(self, timeout_sec=0.1)
-                timeout_counter += 1
-
-            if timeout_counter >= max_wait:
-                self.get_logger().error("[WHISPER] Transcription timeout!")
-                return ""
-
-            # Get transcription
-            text = self.whisper_sub.get_last_transcription().lower()
-
-            # Publish transcribed text to voice_transcription topic
-            msg = String()
-            msg.data = text
-            self.voice_transcription_pub.publish(msg)
-            self.get_logger().info(
-                f"[WHISPER] Published to /voice_transcription: '{text}'")
+            if text:
+                # Publish transcribed text to voice_transcription topic
+                msg = String()
+                msg.data = text
+                self.voice_transcription.publish(msg)
+                self.get_logger().info(
+                    f"[WHISPER] Published to /voice_transcription: '{text}'")
+            else:
+                self.get_logger().warn("[WHISPER] No speech detected in audio")
 
         except Exception as e:
             self.get_logger().error(f"Listen failed: {e}")
-            return ""
 
 
 def main(args=None):
