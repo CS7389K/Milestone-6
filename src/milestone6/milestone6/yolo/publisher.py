@@ -44,7 +44,7 @@ class YOLOPublisher(Node):
     _GSTREAMER_PIPELINE = (
         'nvarguscamerasrc sensor-id=0 ! '
         'video/x-raw(memory:NVMM), width={image_width}, height={image_height}, framerate=30/1, format=NV12 ! '
-        'nvvidconv ! video/x-raw, width={image_width}, height={image_height}, format=BGRx ! '
+        'nvvidconv ! video/x-raw, format=BGRx, width={image_width}, height={image_height} ! '
         'videoconvert ! video/x-raw, format=BGR ! '
         'appsink max-buffers=1 drop=true sync=false'
     )
