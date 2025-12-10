@@ -55,8 +55,9 @@ class ArmMissionState(Enum):
     PREPARING = 3
     GRABBING = 4
     HOLDING = 5
-    RELEASING = 6
-    DONE = 7
+    MOVING = 6
+    RELEASING = 7
+    DONE = 8
 
 
 class TeleopArmV1(Node):
@@ -116,6 +117,7 @@ class TeleopArmV1(Node):
 
         # Timing
         self.hold_start_time = None
+        self.move_start_time = None
 
         class_name = COCO_CLASSES.get(self.target_class, 'unknown')
         self.get_logger().info(f"TeleopArmV1 tracking class '{class_name}' (ID: {self.target_class})")
@@ -303,22 +305,56 @@ class TeleopArmV1(Node):
             elapsed = (self.get_clock().now() - self.hold_start_time).nanoseconds / 1e9
             if elapsed >= 1.5:
                 self.hold_start_time = None
+                self.set_state(ArmMissionState.MOVING)
+            return
+
+        # ------------------- MOVING -------------------
+        if self.state == ArmMissionState.MOVING:
+            if self.move_start_time is None:
+                self.move_start_time = self.get_clock().now()
+                self.get_logger().info("MOVING forward with object (0.5 feet / 15cm)...")
+                # Move forward at slow speed
+                self.teleop_pub.set_velocity(0.10, 0.0)  # 10 cm/s forward
+            
+            elapsed = (self.get_clock().now() - self.move_start_time).nanoseconds / 1e9
+            # 0.5 feet = 15.24 cm, at 10 cm/s takes ~1.5 seconds
+            if elapsed >= 1.5:
+                self.teleop_pub.set_velocity(0.0, 0.0)  # Stop
+                self.move_start_time = None
+                self.get_logger().info("Reached destination. Placing object...")
                 self.set_state(ArmMissionState.RELEASING)
             return
 
         # ------------------- RELEASING -------------------
         if self.state == ArmMissionState.RELEASING:
             try:
-                self.get_logger().info("RELEASING: lower + open + retract.")
+                self.get_logger().info("RELEASING: lower to gripping position + open + retract.")
+                self.teleop_pub.set_velocity(0.0, 0.0)  # Ensure stopped
 
-                lower_pose = {
-                    'joint1': 0.0,
-                    'joint2': -0.80,
-                    'joint3': 0.60,
-                    'joint4': 0.80
-                }
-                self.teleop_pub.send_arm_trajectory(lower_pose)
-                time.sleep(1.5)
+                # Lower to the SAME gripping position used for pickup
+                # This ensures consistent placement height
+                if self.last_yolo_data:
+                    reach_pose = self.calculate_pose_from_object(self.last_yolo_data)
+                    place_pose = {
+                        'joint1': 0.0,  # Centered
+                        'joint2': reach_pose['joint2'] + 0.05,  # Same as grasp height
+                        'joint3': reach_pose['joint3'] - 0.05,  # Same as grasp extension
+                        'joint4': 0.0
+                    }
+                else:
+                    # Fallback if no detection data available
+                    place_pose = {
+                        'joint1': 0.0,
+                        'joint2': 0.69,  # calibrated j2 + 0.05
+                        'joint3': 0.21,  # calibrated j3 - 0.05
+                        'joint4': 0.0
+                    }
+                
+                self.get_logger().info(
+                    f"Lowering to place position: j2={place_pose['joint2']:.2f}, j3={place_pose['joint3']:.2f}"
+                )
+                self.teleop_pub.send_arm_trajectory(place_pose)
+                time.sleep(2.0)
 
                 self.teleop_pub.gripper_open()
                 time.sleep(1.0)
