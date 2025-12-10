@@ -130,9 +130,9 @@ class YOLOPublisher(Node):
             self._network_group = self._vdevice.configure(self._hef, configure_params)[0]
             self._network_group_params = self._network_group.create_params()
             
-            # Create input/output params - use UINT8 quantized format (native Hailo format)
+            # Create input/output params - UINT8 input (quantized), FLOAT32 output (non-quantized)
             self._input_vstreams_params = InputVStreamParams.make(self._network_group, quantized=True, format_type=FormatType.UINT8)
-            self._output_vstreams_params = OutputVStreamParams.make(self._network_group, quantized=True, format_type=FormatType.UINT8)
+            self._output_vstreams_params = OutputVStreamParams.make(self._network_group, quantized=False, format_type=FormatType.FLOAT32)
             
             # Get input shape
             input_info = self._hef.get_input_vstream_infos()[0]

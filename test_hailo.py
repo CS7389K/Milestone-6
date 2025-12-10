@@ -59,12 +59,12 @@ try:
     network_group = vdevice.configure(hef, configure_params)[0]
     print("✓ Network group configured")
     
-    # Create params - use quantized UINT8 (native Hailo format, simpler)
+    # Create params - quantized input (UINT8), non-quantized output (FLOAT32)
     network_group_params = network_group.create_params()
     input_vstreams_params = InputVStreamParams.make(network_group, quantized=True, format_type=FormatType.UINT8)
-    output_vstreams_params = OutputVStreamParams.make(network_group, quantized=True, format_type=FormatType.UINT8)
+    output_vstreams_params = OutputVStreamParams.make(network_group, quantized=False, format_type=FormatType.FLOAT32)
     
-    print("✓ VStream parameters created")
+    print("✓ VStream parameters created (input: UINT8, output: FLOAT32)")
     
     # Create dummy frame - UINT8 format (0-255)
     dummy_frame = np.random.randint(0, 255, (model_height, model_width, channels), dtype=np.uint8)
