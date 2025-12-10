@@ -117,7 +117,8 @@ def generate_launch_description():
             'image_width': 500,
             'image_height': 320,
             'display': True,
-        }]
+        }],
+        additional_env={'LD_PRELOAD': '/usr/lib/aarch64-linux-gnu/libgomp.so.1'}
     )
 
     base_node = Node(
