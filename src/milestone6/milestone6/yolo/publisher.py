@@ -41,16 +41,17 @@ class YOLOPublisher(Node):
     Data Types: https://docs.ros2.org/foxy/api/std_msgs/index-msg.html
     """
     # Camera capture settings for Logitech Brio (or similar webcam)
-    # Optimized for speed: lower capture resolution, direct resize
+    # Aggressively optimized for speed on CPU
     _CAPTURE_WIDTH = 640  # Reduced from 1280 for faster processing
     _CAPTURE_HEIGHT = 480  # Reduced from 720 for faster processing
     _CROP_FACTOR = 0.69  # Crop from 90° (Brio) to ~62° (Pi Camera v2)
+    _FRAME_SKIP = 2  # Process every Nth frame (skip 2 = process every 3rd frame)
 
     def __init__(
             self,
             yolo_model: str = 'yolo11n.pt',
-            image_width: int = 500,
-            image_height: int = 320,
+            image_width: int = 320,  # Reduced from 500 for faster CPU inference
+            image_height: int = 192,  # Reduced from 320 (maintains 5:3 aspect ratio)
             display: bool = True,
         ):
         super().__init__('yolo_publisher')
@@ -110,17 +111,28 @@ class YOLOPublisher(Node):
         if self._display:
             cv2.namedWindow('YOLO Detection', cv2.WINDOW_AUTOSIZE)
             self.get_logger().info("Display window created. Press 'q' to close.")
+        
+        # Frame skipping counter for performance
+        self._frame_counter = 0
+        self._last_results = None
+        self._last_frame = None
 
     def step(self):
+        # Frame skipping for CPU performance - only run YOLO every Nth frame
+        self._frame_counter += 1
+        skip_inference = (self._frame_counter % self._FRAME_SKIP) != 0
+        
         # Check if camera is still open
         if not self._capture.isOpened():
             self.get_logger().error("Camera is not open!")
             return
         
+        t1 = time.time()
         ok, frame = self._capture.read()
         if not ok:
             self.get_logger().warn("Failed to read frame from camera")
             return
+        t2 = time.time()
         
         # Crop to match Pi Camera's narrower FOV (62° vs Brio's 90°)
         # Crop factor converts 90° FOV to ~62° FOV
@@ -133,17 +145,27 @@ class YOLOPublisher(Node):
         
         frame_cropped = frame[y_start:y_start+crop_height, x_start:x_start+crop_width]
         
-        # Resize to target resolution (500x320 by default)
+        # Resize to target resolution (320x192 for CPU speed)
         frame_final = cv2.resize(frame_cropped, (self._target_width, self._target_height))
-            
-        start_time = time.time()
-        # Run inference with verbose off for speed
-        results = self.model(
-            frame_final,
-            verbose=False,  # Disable logging for speed
-            device='cpu'  # Force CPU (more stable than trying CUDA detection)
-        )
-        end_time = time.time()
+        t3 = time.time()
+        
+        # Frame skipping: only run YOLO every Nth frame, reuse previous results
+        if skip_inference and self._last_results is not None:
+            # Reuse previous detection results (much faster!)
+            results = self._last_results
+            t4 = t3  # No inference time
+        else:
+            # Run inference with aggressive CPU optimizations
+            results = self.model(
+                frame_final,
+                verbose=False,  # Disable logging
+                device=self._device,  # GPU or CPU
+                imgsz=320,  # Smaller inference size = MUCH faster on CPU
+                conf=0.25,  # Filter low confidence early
+            )
+            t4 = time.time()
+            # Cache results for frame skipping
+            self._last_results = results
 
         # Extract and publish detection data
         if len(results) > 0 and hasattr(results[0], 'boxes') and results[0].boxes is not None:
@@ -175,9 +197,22 @@ class YOLOPublisher(Node):
                     self._publisher.publish(msg)
                     self.get_logger().debug(f"Detected class {cls}: bbox=({x1:.0f},{y1:.0f},{x2-x1:.0f}x{y2-y1:.0f})")
         
-        # Display frame with detections if enabled (always display, even without detections)
+        # Display frame with detections if enabled
         if self._display:
-            self._display_frame(frame_final, results, end_time - start_time)
+            inference_time = t4 - t3
+            self._display_frame(frame_final, results, inference_time)
+        
+        # Log timing every 30 frames
+        if self._frame_counter % 30 == 0:
+            total_time = t4 - t1
+            yolo_time = t4 - t3
+            skip_status = "SKIPPED" if skip_inference else "RAN"
+            effective_fps = 1 / total_time if total_time > 0 else 0
+            self.get_logger().info(
+                f"Timing (ms): capture={1000*(t2-t1):.1f}, "
+                f"preprocess={1000*(t3-t2):.1f}, YOLO={1000*yolo_time:.1f} ({skip_status}), "
+                f"TOTAL={1000*total_time:.1f} ms ({effective_fps:.1f} FPS)"
+            )
 
     def _display_frame(self, frame, results, inference_time):
         """Display frame with YOLO detections overlaid."""

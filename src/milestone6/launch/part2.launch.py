@@ -114,8 +114,8 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'yolo_model': 'yolo11n.pt',
-            'image_width': 500,
-            'image_height': 320,
+            'image_width': 320,   # Reduced from 500 for CPU speed (2.4x fewer pixels)
+            'image_height': 192,  # Reduced from 320
             'display': True,
         }]
     )
@@ -127,11 +127,11 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'move_wheels': True,
-            'image_width': 500,
-            'image_height': 320,
-            'tolerance': 50,              # Horizontal centering tolerance (pixels)
-            'target_bbox_width': 180,     # Target bbox for ROBOTIS init pose (~22cm distance)
-            'bbox_tolerance': 15,         # Tolerance for distance control
+            'image_width': 320,           # Match YOLO output
+            'image_height': 192,          # Match YOLO output
+            'tolerance': 30,              # Scaled down from 50 (320/500 = 0.64 ratio)
+            'target_bbox_width': 115,     # Scaled down from 180 (180 * 320/500 = 115)
+            'bbox_tolerance': 10,         # Scaled down from 15
             'forward_speed': 0.12,        # Slower for precise positioning
             'turn_speed': 1.2,            # Slower turning for stability
             'track_class': 39,            # bottle
@@ -146,10 +146,10 @@ def generate_launch_description():
         parameters=[{
             'target_class': 39,
             'detection_timeout_sec': 1.0,
-            'image_width': 500,
-            'image_height': 320,
-            'target_bbox_width': 180,     # Match base - ROBOTIS init pose optimal distance
-            'bbox_tolerance': 15,         # Same tolerance as base
+            'image_width': 320,           # Match YOLO output
+            'image_height': 192,          # Match YOLO output  
+            'target_bbox_width': 115,     # Match base - ROBOTIS init pose optimal distance (scaled)
+            'bbox_tolerance': 10,         # Same tolerance as base (scaled)
         }]
     )
 
