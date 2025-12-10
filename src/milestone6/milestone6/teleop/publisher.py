@@ -20,7 +20,6 @@ from .constants import (
     BASE_ANGULAR_VEL_STEP,
     JOINT_NAMES,
     TRAJ_TIME_S,
-    POSES,
     GRIPPER_OPEN_POSITION,
     GRIPPER_CLOSE_POSITION,
 )

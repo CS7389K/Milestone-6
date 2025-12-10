@@ -10,10 +10,10 @@ setup(
     version='0.0.0',
     packages=[
         package_name,
-        f'{package_name}.teleop',
-        f'{package_name}.yolo',
         f'{package_name}.api',
+        f'{package_name}.teleop',
         f'{package_name}.util',
+        f'{package_name}.yolo',
     ],
     data_files=[
         ('share/ament_index/resource_index/packages',
@@ -32,15 +32,12 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            f"base = {package_name}.teleop.base:main",
-            f"arm = {package_name}.teleop.arm:main",
             f"teleop_publisher = {package_name}.teleop.publisher:main",
-            f"client = {package_name}.client:main",
+            f"teleop_subscriber = {package_name}.teleop.subscriber:main",
             f"yolo_publisher = {package_name}.yolo.publisher:main",
-            f"yolo_debug_subscriber = {package_name}.yolo.debug_subscriber:main",
-            f"arm1 = {package_name}.teleop.arm1:main",
-            f"arm2 = {package_name}.teleop.arm2:main",
-            f"arm_calibrate = {package_name}.teleop.arm_calibrate:main",
+            f"yolo_subscriber = {package_name}.yolo.subscriber:main",
+            f"part1 = {package_name}.part1:main",
+            f"part2 = {package_name}.part2:main",
         ],
     },
 )
