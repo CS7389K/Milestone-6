@@ -77,14 +77,11 @@ class YOLOPublisher(Node):
         )
 
         self.get_logger().info("Opening camera with V4L2 backend...")
-        # Try video0 first, fallback to video1
-        self._capture = cv2.VideoCapture(0, cv2.CAP_V4L2)
-        if not self._capture.isOpened():
-            self.get_logger().warn("video0 failed, trying video1...")
-            self._capture = cv2.VideoCapture(1, cv2.CAP_V4L2)
+        # Use video1 (Logitech Brio USB camera)
+        self._capture = cv2.VideoCapture(1, cv2.CAP_V4L2)
         
         if not self._capture.isOpened():
-            raise RuntimeError("Error: Unable to open camera on video0 or video1")
+            raise RuntimeError("Error: Unable to open camera on /dev/video1")
         
         # Set format and capture at high resolution for better quality
         self._capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
