@@ -113,7 +113,7 @@ class YOLOPublisher(Node):
 
         if self._display:
             cv2.namedWindow('YOLO Detection', cv2.WINDOW_AUTOSIZE)
-            self.get_logger().info("Display window created. Press 'q' to close.")
+            self.get_logger().info("Creating display window (Press 'q' to close)...")
 
     def step(self):
         # Check if camera is still open
