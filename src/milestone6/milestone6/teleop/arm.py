@@ -111,6 +111,10 @@ class TeleopArm(Node):
         # ------------------- Joint State Tracking -------------------
         self.get_logger().info("Starting Joint State Subscriber...")
         self.teleop_sub = TeleopSubscriber(self)
+        
+        # Track joint state warnings
+        self.joint_state_warning_count = 0
+        self.joint_state_warning_interval = 50  # Warn every 5 seconds (50 * 0.1s)
 
         # ------------------- Timer -------------------
         self.timer = self.create_timer(0.1, self.tick)  # 10 Hz
@@ -145,11 +149,12 @@ class TeleopArm(Node):
 
         # Timing
         self.hold_start_time = None
+        self.last_attempt_time = None
+        self.attempt_cooldown = 10.0  # Wait 10 seconds between grab attempts
 
         class_name = COCO_CLASSES.get(self.target_class, 'unknown')
         self.get_logger().info(f"Tracking COCO class: '{class_name}' (ID: {self.target_class})")
-        self.get_logger().info("TeleopArm ready: Coordinated base+arm control")
-        self.get_logger().info("Waiting for object detection...")
+        self.get_logger().info("TeleopArmV1 ready. Waiting for object detection...")
     
     
     def wait_for_motion_complete(self, target_positions: dict, tolerance: float = 0.15) -> bool:
@@ -312,6 +317,15 @@ class TeleopArm(Node):
         if self.state == ArmMissionState.WAITING:
             # Check if we have a fresh detection
             if self.object_detected and self.last_yolo_data is not None:
+                # Check cooldown period - don't retry immediately after failed attempt
+                if self.last_attempt_time is not None:
+                    cooldown_elapsed = (self.get_clock().now() - self.last_attempt_time).nanoseconds / 1e9
+                    if cooldown_elapsed < self.attempt_cooldown:
+                        remaining = self.attempt_cooldown - cooldown_elapsed
+                        if int(remaining) != int(remaining + 0.1):  # Log once per second
+                            self.get_logger().info(f"⏳ Cooldown active: waiting {remaining:.0f}s before next attempt...")
+                        return
+                
                 # Check if detection is recent (within timeout)
                 if self.last_detection_time:
                     elapsed = (self.get_clock().now() - self.last_detection_time).nanoseconds / 1e9
@@ -319,6 +333,7 @@ class TeleopArm(Node):
                         self.get_logger().info(f"\n{'='*60}\n🎯 Object detected (class {self.last_yolo_data.clz})! Starting grab sequence...\n{'='*60}")
                         self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
                         self.retry_count = 0  # Reset retry counter
+                        self.last_attempt_time = self.get_clock().now()  # Record attempt time
                         self.set_state(ArmMissionState.PREPARING)
                     else:
                         self.get_logger().debug(f"Detection too old ({elapsed:.1f}s), waiting...")
@@ -328,7 +343,24 @@ class TeleopArm(Node):
         elif self.state == ArmMissionState.PREPARING:
             # Wait for joint states before proceeding
             if not self.teleop_sub.have_joint_states:
-                self.get_logger().warn("Waiting for joint states...")
+                self.joint_state_warning_count += 1
+                if self.joint_state_warning_count % self.joint_state_warning_interval == 1:
+                    self.get_logger().error(
+                        "=" * 60 + "\n"
+                        "NO JOINT STATES AVAILABLE!\n"
+                        "The /joint_states topic is not publishing data.\n"
+                        "\n"
+                        "SOLUTION: You must run hardware.launch.py FIRST:\n"
+                        "  Terminal 1: ros2 launch turtlebot3_manipulation_bringup hardware.launch.py\n"
+                        "  Terminal 2: ./run_part2.sh  (this script)\n"
+                        "\n"
+                        "Or check if controllers are running:\n"
+                        "  ros2 topic list | grep joint_states\n"
+                        "  ros2 topic echo /joint_states\n"
+                        "=" * 60
+                    )
+                else:
+                    self.get_logger().warn("Waiting for joint states...")
                 return
             
             # Multi-step state machine for PREPARING
