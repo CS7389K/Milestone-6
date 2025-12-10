@@ -31,9 +31,28 @@ try:
     print("✓ HEF model loaded")
     
     # Get input info
-    input_info = hef.get_input_vstream_infos()[0]
-    print(f"✓ Model input shape: {input_info.shape}")
-    print(f"  Width: {input_info.shape[1]}, Height: {input_info.shape[0]}")
+    input_infos = hef.get_input_vstream_infos()
+    output_infos = hef.get_output_vstream_infos()
+    
+    print(f"✓ Model has {len(input_infos)} input(s) and {len(output_infos)} output(s)")
+    
+    for i, info in enumerate(input_infos):
+        print(f"  Input {i}: {info.name}")
+        print(f"    Shape: {info.shape}")
+        print(f"    Format: {info.format}")
+        print(f"    Data bytes: {info.data_bytes}")
+    
+    input_info = input_infos[0]
+    
+    # Parse shape - Hailo typically uses NHWC format
+    shape = input_info.shape
+    if len(shape) == 4:
+        batch_size, model_height, model_width, channels = shape
+    else:
+        model_height, model_width, channels = shape
+        batch_size = 1
+    
+    print(f"\n  Parsed: batch={batch_size}, h={model_height}, w={model_width}, c={channels}")
     
     # Configure network
     configure_params = ConfigureParams.create_from_hef(hef, interface=HailoStreamInterface.PCIe)
@@ -42,14 +61,20 @@ try:
     
     # Create params for inference
     network_group_params = network_group.create_params()
+    
+    # Set batch size to 1 for single frame inference
     input_vstreams_params = InputVStreamParams.make(network_group, quantized=False, format_type=FormatType.FLOAT32)
     output_vstreams_params = OutputVStreamParams.make(network_group, quantized=False, format_type=FormatType.FLOAT32)
-    print("✓ VStream parameters created")
     
-    # Test inference with dummy data
-    model_height = input_info.shape[0]
-    model_width = input_info.shape[1]
-    dummy_frame = np.random.rand(model_height, model_width, 3).astype(np.float32)
+    # Override batch size if needed
+    for param_name in input_vstreams_params:
+        input_vstreams_params[param_name].user_buffer_format.shape[0] = 1  # Set batch to 1
+    
+    print("✓ VStream parameters created (batch size set to 1)")
+    
+    # Create dummy frame for single batch
+    dummy_frame = np.random.rand(1, model_height, model_width, channels).astype(np.float32)
+    print(f"  Created dummy data with shape: {dummy_frame.shape}")
     
     print(f"\nRunning test inference with {model_width}x{model_height} dummy frame...")
     
@@ -60,11 +85,11 @@ try:
     with InferVStreams(network_group, input_vstreams_params, output_vstreams_params) as infer_pipeline:
         input_dict = {input_name: dummy_frame}
         
-        with network_group.activate(network_group_params):
-            import time
-            t1 = time.time()
-            results = infer_pipeline.infer(input_dict)
-            t2 = time.time()
+        # Don't use activate() with scheduler - it's deprecated
+        import time
+        t1 = time.time()
+        results = infer_pipeline.infer(input_dict)
+        t2 = time.time()
             
     print(f"✓ Inference completed in {(t2-t1)*1000:.1f}ms")
     print(f"✓ Output tensors: {list(results.keys())}")
