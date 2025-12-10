@@ -48,7 +48,7 @@ from milestone6.yolo.yolo_data import YOLOData
 # Arm control via teleop publisher
 from milestone6.teleop.publisher import TeleopPublisher
 from milestone6.teleop.subscriber import TeleopSubscriber
-from milestone6.coco import COCO_CLASSES
+from milestone6.milestone6.util.coco import COCO_CLASSES
 
 
 class ArmMissionState(Enum):

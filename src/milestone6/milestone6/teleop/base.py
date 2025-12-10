@@ -22,7 +22,7 @@ from rclpy.node import Node
 from milestone6.teleop.publisher import TeleopPublisher
 from milestone6.yolo.subscriber import YOLOSubscriber
 from milestone6.yolo.yolo_data import YOLOData
-from milestone6.coco import COCO_CLASSES
+from milestone6.milestone6.util.coco import COCO_CLASSES
 
 
 class TeleopBase(Node):
