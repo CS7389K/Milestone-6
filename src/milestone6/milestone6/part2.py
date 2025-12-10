@@ -554,7 +554,7 @@ class Part2(Node):
                 "[RELEASE] Step 0: Lowering arm to place object...")
             lower_pos = {
                 'joint1': 0.0,
-                'joint2': 0.3,   # Lower down
+                'joint2': 0.4,   # Lower down
                 'joint3': -0.2,  # Extend
                 'joint4': 0.0
             }

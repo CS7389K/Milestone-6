@@ -106,7 +106,7 @@ def generate_launch_description():
 
     target_bbox_width_arg = DeclareLaunchArgument(
         'target_bbox_width',
-        default_value='300',
+        default_value='325',
         description='Ideal bounding box width for grabbing in pixels'
     )
 
