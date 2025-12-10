@@ -40,12 +40,11 @@ class YOLOPublisher(Node):
 
     Data Types: https://docs.ros2.org/foxy/api/std_msgs/index-msg.html
     """
-    _GSTREAMER_PIPELINE =  (
-        'nvarguscamerasrc sensor-id=0 ! video/x-raw(memory:NVMM), ',
-        'width={image_width},height={image_height},framerate=30/1,format=NV12 ! ',
-        'nvvidconv ! video/x-raw,format=BGRx,width={image_width},height={image_height} ! ',
-        'videoconvert ! video/x-raw,format=BGR ! appsink drop=1'
-    )
+    # Camera capture settings for Logitech Brio (or similar webcam)
+    # Captures at higher resolution, crops to match Pi Camera FOV, then resizes
+    _CAPTURE_WIDTH = 1280
+    _CAPTURE_HEIGHT = 720
+    _CROP_FACTOR = 0.69  # Crop from 90° (Brio) to ~62° (Pi Camera v2)
 
     def __init__(
             self,
@@ -68,21 +67,38 @@ class YOLOPublisher(Node):
         image_height = self.get_parameter('image_height').value
         self._display = self.get_parameter('display').value
         
+        # Store target dimensions for final output
+        self._target_width = image_width
+        self._target_height = image_height
+        
         self.get_logger().info("Initializing YOLO Publisher Node...")
         self._publisher = self.create_publisher(
             String, 'yolo_topic', 10
         )
 
-        self.get_logger().info("Opening camera...")
-        pipeline = "".join(self._GSTREAMER_PIPELINE).format(
-            image_width=image_width,
-            image_height=image_height
-        )
-        self.get_logger().info(f"GStreamer pipeline: {pipeline}")
-        self._capture = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
-        self.get_logger().info(f"Camera opened: {self._capture.isOpened()}")
+        self.get_logger().info("Opening camera with V4L2 backend...")
+        # Try video0 first, fallback to video1
+        self._capture = cv2.VideoCapture(0, cv2.CAP_V4L2)
         if not self._capture.isOpened():
-            raise RuntimeError("Error: Unable to open camera")
+            self.get_logger().warn("video0 failed, trying video1...")
+            self._capture = cv2.VideoCapture(1, cv2.CAP_V4L2)
+        
+        if not self._capture.isOpened():
+            raise RuntimeError("Error: Unable to open camera on video0 or video1")
+        
+        # Set format and capture at high resolution for better quality
+        self._capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+        self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, self._CAPTURE_WIDTH)
+        self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self._CAPTURE_HEIGHT)
+        self._capture.set(cv2.CAP_PROP_FPS, 30)
+        
+        actual_width = int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_height = int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        actual_fps = self._capture.get(cv2.CAP_PROP_FPS)
+        
+        self.get_logger().info(f"Camera opened successfully!")
+        self.get_logger().info(f"Capture Resolution: {actual_width}x{actual_height} @ {actual_fps}fps")
+        self.get_logger().info(f"Output Resolution: {self._target_width}x{self._target_height} (cropped & resized)")
 
         self.get_logger().info("Loading YOLO model...")
         self.model = YOLO(yolo_model, task="detect")
@@ -101,9 +117,23 @@ class YOLOPublisher(Node):
         if not ok:
             self.get_logger().warn("Failed to read frame from camera")
             return
+        
+        # Crop to match Pi Camera's narrower FOV (62° vs Brio's 90°)
+        # Crop factor converts 90° FOV to ~62° FOV
+        height, width = frame.shape[:2]
+        crop_width = int(width * self._CROP_FACTOR)
+        crop_height = int(height * self._CROP_FACTOR)
+        
+        x_start = (width - crop_width) // 2
+        y_start = (height - crop_height) // 2
+        
+        frame_cropped = frame[y_start:y_start+crop_height, x_start:x_start+crop_width]
+        
+        # Resize to target resolution (500x320 by default)
+        frame_final = cv2.resize(frame_cropped, (self._target_width, self._target_height))
             
         start_time = time.time()
-        results = self.model(frame)
+        results = self.model(frame_final)
         end_time = time.time()
 
         # Extract and publish detection data
@@ -138,7 +168,7 @@ class YOLOPublisher(Node):
         
         # Display frame with detections if enabled (always display, even without detections)
         if self._display:
-            self._display_frame(frame, results, end_time - start_time)
+            self._display_frame(frame_final, results, end_time - start_time)
 
     def _display_frame(self, frame, results, inference_time):
         """Display frame with YOLO detections overlaid."""
