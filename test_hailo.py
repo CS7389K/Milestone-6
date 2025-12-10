@@ -30,33 +30,40 @@ try:
     network_group = network_groups[0]
     print("✓ Network group configured")
     
-    # Get input info
+    # Get input/output info and check batch size
     input_infos = hef.get_input_vstream_infos()
     output_infos = hef.get_output_vstream_infos()
     
     print(f"✓ Model has {len(input_infos)} input(s) and {len(output_infos)} output(s)")
     
-    for i, info in enumerate(input_infos):
-        print(f"  Input {i}: {info.name}")
-        print(f"    Shape: {info.shape}")
-    
     input_info = input_infos[0]
+    print(f"  Input: {input_info.name}")
+    print(f"    Shape: {input_info.shape}")
     
-    # Parse shape - Hailo typically uses HWC format (no batch in shape)
+    # Parse shape
     shape = input_info.shape
     if len(shape) == 4:
         batch_size, model_height, model_width, channels = shape
     elif len(shape) == 3:
         model_height, model_width, channels = shape
-        batch_size = 1  # Will add batch dimension manually
+        batch_size = 1
     else:
-        raise ValueError(f"Unexpected shape format: {shape}")
+        raise ValueError(f"Unexpected shape: {shape}")
     
-    print(f"\n  Parsed: h={model_height}, w={model_width}, c={channels}")
+    print(f"    Parsed: batch={batch_size}, h={model_height}, w={model_width}, c={channels}")
     
-    # Create dummy frame - UINT8 format (0-255)
-    dummy_frame = np.random.randint(0, 255, (model_height, model_width, channels), dtype=np.uint8)
-    print(f"  Created dummy data: {dummy_frame.shape}, dtype: {dummy_frame.dtype}")
+    # The error shows it wants 640 frames batched!
+    # Calculate from error: 786432000 / 1228800 = 640
+    # So we need to provide batch_size worth of frames
+    single_frame_size = model_height * model_width * channels  # 1228800
+    expected_batch = 786432000 // single_frame_size  # Should be 640
+    
+    print(f"\n  Model expects batch of {expected_batch} frames")
+    print(f"  Creating batch of {expected_batch} dummy frames...")
+    
+    # Create batched input: [batch_size, H, W, C]
+    dummy_batch = np.random.randint(0, 255, (expected_batch, model_height, model_width, channels), dtype=np.uint8)
+    print(f"  Created data: {dummy_batch.shape}, dtype: {dummy_batch.dtype}")
     
     print(f"\nRunning test inference...")
     
@@ -76,7 +83,7 @@ try:
             import time
             t1 = time.time()
             input_name = list(input_vstreams_params.keys())[0]
-            results = infer_pipeline.infer({input_name: dummy_frame})
+            results = infer_pipeline.infer({input_name: dummy_batch})
             t2 = time.time()
             
     print(f"✓ Inference completed in {(t2-t1)*1000:.1f}ms")
