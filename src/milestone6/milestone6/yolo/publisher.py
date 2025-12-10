@@ -117,34 +117,29 @@ class YOLOPublisher(Node):
     def _init_hailo(self, hef_path: str):
         """Initialize Hailo device and HEF model."""
         try:
-            # Create VDevice (Hailo device manager)
+            # Create VDevice
             params = VDevice.create_params()
             params.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN
             self._vdevice = VDevice(params)
             
-            # Load HEF file
+            # Load HEF
             self._hef = HEF(hef_path)
             
-            # Configure network group
+            # Configure network
             configure_params = ConfigureParams.create_from_hef(self._hef, interface=HailoStreamInterface.PCIe)
             self._network_group = self._vdevice.configure(self._hef, configure_params)[0]
             self._network_group_params = self._network_group.create_params()
             
-            # Get input/output specs (use default batch size from model)
-            self._input_vstreams_params = InputVStreamParams.make(self._network_group, quantized=False, format_type=FormatType.FLOAT32)
-            self._output_vstreams_params = OutputVStreamParams.make(self._network_group, quantized=False, format_type=FormatType.FLOAT32)
+            # Create input/output params - use UINT8 quantized format (native Hailo format)
+            self._input_vstreams_params = InputVStreamParams.make(self._network_group, quantized=True, format_type=FormatType.UINT8)
+            self._output_vstreams_params = OutputVStreamParams.make(self._network_group, quantized=True, format_type=FormatType.UINT8)
             
-            # Get expected input shape
+            # Get input shape
             input_info = self._hef.get_input_vstream_infos()[0]
             shape = input_info.shape
-            if len(shape) == 4:
-                _, self._model_height, self._model_width, self._model_channels = shape
-            elif len(shape) == 3:
-                self._model_height, self._model_width, self._model_channels = shape
-            else:
-                raise ValueError(f"Unexpected input shape: {shape}")
+            self._model_height, self._model_width, self._model_channels = shape[0], shape[1], shape[2]
             
-            self.get_logger().info(f"Hailo model input: {self._model_width}x{self._model_height}x{self._model_channels}")
+            self.get_logger().info(f"Hailo model ready: {self._model_width}x{self._model_height}")
             
         except Exception as e:
             self.get_logger().error(f"Failed to initialize Hailo: {e}")
@@ -240,22 +235,18 @@ class YOLOPublisher(Node):
 
     def _run_hailo_inference(self, frame):
         """Run inference on Hailo accelerator."""
-        # Resize frame to model input size
+        # Resize to model size
         input_frame = cv2.resize(frame, (self._model_width, self._model_height))
         
-        # Convert BGR to RGB and normalize to float32 [0, 1]
-        input_data = cv2.cvtColor(input_frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        # Convert BGR to RGB - keep as UINT8 (0-255)
+        input_data = cv2.cvtColor(input_frame, cv2.COLOR_BGR2RGB)
         
-        # Input should be [H, W, C] - no batch dimension needed
-        # Run inference through Hailo (no activate() needed with scheduler)
+        # Run inference
         with InferVStreams(self._network_group, self._input_vstreams_params, self._output_vstreams_params) as infer_pipeline:
             input_name = list(self._input_vstreams_params.keys())[0]
-            input_dict = {input_name: input_data}
-            
-            # Don't use activate() - deprecated when using scheduler
-            infer_results = infer_pipeline.infer(input_dict)
+            infer_results = infer_pipeline.infer({input_name: input_data})
         
-        # Post-process results (YOLOv11 format)
+        # Post-process
         detections = self._postprocess_yolo(infer_results, frame.shape[1], frame.shape[0])
         return detections
     

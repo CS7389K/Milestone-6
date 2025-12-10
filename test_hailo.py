@@ -59,16 +59,16 @@ try:
     network_group = vdevice.configure(hef, configure_params)[0]
     print("✓ Network group configured")
     
-    # Create params for inference (use default batch size from model)
+    # Create params - use quantized UINT8 (native Hailo format, simpler)
     network_group_params = network_group.create_params()
-    input_vstreams_params = InputVStreamParams.make(network_group, quantized=False, format_type=FormatType.FLOAT32)
-    output_vstreams_params = OutputVStreamParams.make(network_group, quantized=False, format_type=FormatType.FLOAT32)
+    input_vstreams_params = InputVStreamParams.make(network_group, quantized=True, format_type=FormatType.UINT8)
+    output_vstreams_params = OutputVStreamParams.make(network_group, quantized=True, format_type=FormatType.UINT8)
     
     print("✓ VStream parameters created")
     
-    # Create dummy frame - shape should be [H, W, C] without explicit batch
-    dummy_frame = np.random.rand(model_height, model_width, channels).astype(np.float32)
-    print(f"  Created dummy data with shape: {dummy_frame.shape}")
+    # Create dummy frame - UINT8 format (0-255)
+    dummy_frame = np.random.randint(0, 255, (model_height, model_width, channels), dtype=np.uint8)
+    print(f"  Created dummy data with shape: {dummy_frame.shape}, dtype: {dummy_frame.dtype}")
     
     print(f"\nRunning test inference with {model_width}x{model_height} dummy frame...")
     
@@ -77,12 +77,9 @@ try:
     print(f"  Input layer: {input_name}")
     
     with InferVStreams(network_group, input_vstreams_params, output_vstreams_params) as infer_pipeline:
-        input_dict = {input_name: dummy_frame}
-        
-        # Don't use activate() with scheduler - it's deprecated
         import time
         t1 = time.time()
-        results = infer_pipeline.infer(input_dict)
+        results = infer_pipeline.infer({input_name: dummy_frame})
         t2 = time.time()
             
     print(f"✓ Inference completed in {(t2-t1)*1000:.1f}ms")
