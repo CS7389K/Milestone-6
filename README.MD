@@ -124,6 +124,44 @@ ros2 launch milestone6 part2.launch.py
 - [Python 3.8 Documentation](https://docs.python.org/3.8/)
 - [ROS2 Python Client Library](https://docs.ros.org/en/foxy/Tutorials/Beginner-Client-Libraries/Writing-A-Simple-Py-Publisher-And-Subscriber.html)
 
+## Troubleshooting
+
+### Launch File Not Found Error
+
+**Problem**: When running `ros2 launch milestone6 <launch_file>.launch.py`, you get an error like:
+```
+File <launch_file>.launch.py was not found in the share directory of the package
+```
+
+**Cause**: This can occur when an old installation of the package exists in a different location (e.g., `milestone6` vs `Milestone-6` directory name mismatch).
+
+**Solution**:
+1. Find the old installation location:
+   ```bash
+   ros2 pkg prefix milestone6
+   ```
+
+2. Remove the old installation:
+   ```bash
+   rm -rf <old_installation_path>
+   ```
+
+3. Rebuild the package:
+   ```bash
+   colcon build --packages-select milestone6
+   source install/setup.bash
+   ```
+
+4. Verify the new installation location:
+   ```bash
+   ros2 pkg prefix milestone6
+   ```
+
+5. Confirm launch files are installed:
+   ```bash
+   ls -la $(ros2 pkg prefix milestone6)/share/milestone6/launch/
+   ```
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
