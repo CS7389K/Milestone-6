@@ -80,6 +80,11 @@ class TeleopBase(Node):
         self._last_detection_time = None
         self._detection_timeout = 0.5  # Stop robot if no detection for 0.5 seconds
         
+        # Move-wait-update behavior: prevent oscillation
+        self._last_command_time = None
+        self._command_cooldown = 0.3  # Wait 300ms after each command for YOLO update
+        self._is_moving = False
+        
         # Create timer to check for lost target
         self.check_timer = self.create_timer(0.1, self._check_target_lost)
 
@@ -107,11 +112,21 @@ class TeleopBase(Node):
                 return
 
             # Update detection timestamp
-            self._last_detection_time = self.get_clock().now()
+            current_time = self.get_clock().now()
+            self._last_detection_time = current_time
+            
+            # Move-wait-update: Skip if we recently sent a command (waiting for new detection)
+            if self._last_command_time is not None:
+                time_since_command = (current_time - self._last_command_time).nanoseconds / 1e9
+                if time_since_command < self._command_cooldown:
+                    return  # Still in cooldown, wait for more detections
             self.get_logger().debug(f"Detected target class {data.clz}! Processing movement...")
 
             # Calculate bounding box center
             bbox_center_x = data.bbox_x + (data.bbox_w / 2.0)
+
+            # Record that we're processing this detection
+            self._last_command_time = current_time
 
             # Calculate image center
             image_center_x = self._image_width / 2.0
@@ -161,6 +176,7 @@ class TeleopBase(Node):
             
             # Update teleop velocity command
             self.teleop.set_velocity(linear_x=linear_vel, angular_z=angular_vel)
+            self._is_moving = (linear_vel != 0.0 or angular_vel != 0.0)
     
     def _check_target_lost(self):
         """Stop robot if target hasn't been detected recently."""
@@ -170,9 +186,12 @@ class TeleopBase(Node):
         time_since_detection = (self.get_clock().now() - self._last_detection_time).nanoseconds / 1e9
         if time_since_detection > self._detection_timeout:
             # Target lost, stop the robot
-            self.teleop.set_velocity(linear_x=0.0, angular_z=0.0)
-            self.get_logger().debug(f"Target lost for {time_since_detection:.2f}s, stopping robot")
+            if self._is_moving:
+                self.teleop.set_velocity(linear_x=0.0, angular_z=0.0)
+                self.get_logger().debug(f"Target lost for {time_since_detection:.2f}s, stopping robot")
+                self._is_moving = False
             self._last_detection_time = None  # Reset so we don't spam logs
+            self._last_command_time = None  # Allow immediate response when target reappears
     
     def shutdown(self):
         """Clean shutdown of the server."""
