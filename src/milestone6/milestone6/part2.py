@@ -84,7 +84,7 @@ class Part2(Node):
         self.declare_parameter('target_bbox_width', 180)  # pixels
         self.declare_parameter('forward_speed', 0.15)  # m/s
         self.declare_parameter('turn_speed', 1.0)  # rad/s
-        self.declare_parameter('detection_timeout', 0.5)  # seconds
+        self.declare_parameter('detection_timeout', 1)  # seconds
         self.declare_parameter('transport_distance', 1.0)  # meters
 
         tracking_classes = self.get_parameter('tracking_classes').value
@@ -190,10 +190,14 @@ class Part2(Node):
     def detection_is_fresh(self):
         """Check if we have a recent detection."""
         if self.last_detection_time is None:
+            self.get_logger().debug("No detection time set")
             return False
         elapsed = (self.get_clock().now() -
                    self.last_detection_time).nanoseconds / 1e9
-        return elapsed < self.detection_timeout
+        is_fresh = elapsed < self.detection_timeout
+        self.get_logger().debug(
+            f"Detection age: {elapsed:.3f}s, fresh: {is_fresh}")
+        return is_fresh
 
     def stop_base(self):
         """Stop base movement."""
@@ -365,26 +369,31 @@ class Part2(Node):
             if self.detection_is_fresh() and self.last_yolo_data is not None:
                 self.get_logger().info("\n" + "=" * 70)
                 self.get_logger().info("START: Object detected!")
+                self.get_logger().info(
+                    f"Current state: {self.state}, changing to CENTERING")
                 self.get_logger().info("=" * 70)
                 self.state = State.CENTERING
-            return
+            else:
+                return
 
         # ==================== CENTERING ====================
-        elif self.state == State.CENTERING:
+        if self.state == State.CENTERING:
+            self.get_logger().debug("In CENTERING state, checking detection freshness...")
             if not self.detection_is_fresh():
                 self.get_logger().warn("Lost detection during centering, returning to IDLE")
                 self.stop_base()
                 self.state = State.IDLE
                 return
 
+            self.get_logger().debug(
+                "[CENTERING] Attempting to center on object...")
             if self.center_on_object(self.last_yolo_data):
                 self.get_logger().info(
                     "[CENTERING] Object centered! Moving to APPROACHING...")
                 self.state = State.APPROACHING
-            return
 
         # ==================== APPROACHING ====================
-        elif self.state == State.APPROACHING:
+        if self.state == State.APPROACHING:
             if not self.detection_is_fresh():
                 self.get_logger().warn("Lost detection during approach, returning to IDLE")
                 self.stop_base()
@@ -403,15 +412,13 @@ class Part2(Node):
                 self.stop_base()
                 self.grab_step = 0
                 self.state = State.GRABBING
-            return
 
         # ==================== GRABBING ====================
-        elif self.state == State.GRABBING:
+        if self.state == State.GRABBING:
             self._execute_grab_sequence()
-            return
 
         # ==================== TRANSPORTING ====================
-        elif self.state == State.TRANSPORTING:
+        if self.state == State.TRANSPORTING:
             if self.transport_start_time is None:
                 # Calculate how long to move forward
                 self.transport_duration = self.transport_distance / self.forward_speed
@@ -441,15 +448,13 @@ class Part2(Node):
                     if int(remaining) != int(remaining + 0.1):  # Log every second
                         self.get_logger().info(
                             f"Transporting... {remaining:.0f}s remaining")
-            return
 
         # ==================== RELEASING ====================
-        elif self.state == State.RELEASING:
+        if self.state == State.RELEASING:
             self._execute_release_sequence()
-            return
 
         # ==================== DONE ====================
-        elif self.state == State.DONE:
+        if self.state == State.DONE:
             self.get_logger().info("\n" + "=" * 70)
             self.get_logger().info("COMPLETE!")
             self.get_logger().info("Object successfully grabbed and transported 1 meter!")

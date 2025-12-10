@@ -45,12 +45,11 @@ class TeleopBase(Node):
         self.declare_parameter('image_width', 1280)
         self.declare_parameter('move_wheels', True)
         self.declare_parameter('bbox_tolerance', 20)
-        self.declare_parameter('center_tolerance', 30) # pixels
+        self.declare_parameter('center_tolerance', 30)  # pixels
         self.declare_parameter('target_bbox_width', 180)  # pixels
         self.declare_parameter('forward_speed', 0.15)  # m/s
         self.declare_parameter('turn_speed', 1.0)  # rad/s
         self.declare_parameter('detection_timeout', 0.5)  # seconds
-
 
         tracking_classes = self.get_parameter('tracking_classes').value
         self.image_width = self.get_parameter('image_width').value
@@ -70,11 +69,11 @@ class TeleopBase(Node):
             # Handle case where parameter is already an integer
             self.tracking_classes = [int(tracking_classes)]
 
-
         # Get class names from COCO dataset
-        class_names = [COCO_CLASSES.get(cls, f'unknown({cls})') \
+        class_names = [COCO_CLASSES.get(cls, f'unknown({cls})')
                        for cls in self.tracking_classes]
-        class_list_str = ', '.join([f'{name} (ID: {cls})' for name, cls in zip(class_names, self.tracking_classes)])
+        class_list_str = ', '.join(
+            [f'{name} (ID: {cls})' for name, cls in zip(class_names, self.tracking_classes)])
 
         self.get_logger().info("Initializing TeleopBase Node...")
         self.get_logger().info(f"Tracking COCO classes: {class_list_str}")

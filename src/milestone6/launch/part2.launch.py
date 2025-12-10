@@ -121,7 +121,7 @@ def generate_launch_description():
 
     detection_timeout_arg = DeclareLaunchArgument(
         'detection_timeout',
-        default_value='0.5',
+        default_value='1',
         description='Detection timeout in seconds'
     )
 

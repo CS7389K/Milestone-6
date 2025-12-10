@@ -1,9 +1,9 @@
-from rclpy.node import Node
 import rclpy
 from builtin_interfaces.msg import Duration
 from control_msgs.action import FollowJointTrajectory, GripperCommand
 from geometry_msgs.msg import Twist
 from rclpy.action import ActionClient
+from rclpy.node import Node
 from std_srvs.srv import Trigger
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
@@ -132,6 +132,11 @@ class TeleopPublisher:
         self.cmd_vel.angular.x = 0.0
         self.cmd_vel.angular.y = 0.0
         self.cmd_vel.angular.z = float(angular_z)
+
+        # Log significant velocity changes
+        if abs(linear_x) > 0.01 or abs(angular_z) > 0.01:
+            self._node.get_logger().info(
+                f"Setting velocity: linear_x={linear_x:.3f}, angular_z={angular_z:.3f}")
 
     def inc_linear(self):
         """Increase linear velocity."""
