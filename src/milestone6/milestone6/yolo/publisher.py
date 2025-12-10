@@ -243,7 +243,8 @@ class YOLOPublisher(Node):
         
         # Run inference through Hailo
         with InferVStreams(self._network_group, self._input_vstreams_params, self._output_vstreams_params) as infer_pipeline:
-            input_dict = {self._input_vstreams_params[0].name: input_data}
+            input_name = list(self._input_vstreams_params.keys())[0]
+            input_dict = {input_name: input_data}
             
             with self._network_group.activate(self._network_group_params):
                 infer_results = infer_pipeline.infer(input_dict)

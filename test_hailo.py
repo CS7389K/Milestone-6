@@ -53,8 +53,12 @@ try:
     
     print(f"\nRunning test inference with {model_width}x{model_height} dummy frame...")
     
+    # Get input layer name
+    input_name = list(input_vstreams_params.keys())[0]
+    print(f"  Input layer: {input_name}")
+    
     with InferVStreams(network_group, input_vstreams_params, output_vstreams_params) as infer_pipeline:
-        input_dict = {input_vstreams_params[0].name: dummy_frame}
+        input_dict = {input_name: dummy_frame}
         
         with network_group.activate(network_group_params):
             import time
