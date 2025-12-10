@@ -24,9 +24,7 @@ from std_msgs.msg import String
 
 import cv2
 import numpy as np
-from hailo_platform import (HEF, ConfigureParams, FormatType, HailoStreamInterface,
-                            InferVStreams, InputVStreamParams, OutputVStreamParams,
-                            HailoSchedulingAlgorithm, VDevice)
+from hailo_platform import HEF, VDevice, InferVStreams, InputVStreamParams, OutputVStreamParams, FormatType
 
 from .yolo_data import YOLOData
 from .coco import COCO_CLASSES
@@ -117,27 +115,27 @@ class YOLOPublisher(Node):
     def _init_hailo(self, hef_path: str):
         """Initialize Hailo device and HEF model."""
         try:
-            # Create VDevice
-            params = VDevice.create_params()
-            params.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN
-            self._vdevice = VDevice(params)
-            
             # Load HEF
             self._hef = HEF(hef_path)
             
-            # Configure network
-            configure_params = ConfigureParams.create_from_hef(self._hef, interface=HailoStreamInterface.PCIe)
-            self._network_group = self._vdevice.configure(self._hef, configure_params)[0]
-            self._network_group_params = self._network_group.create_params()
+            # Create VDevice
+            self._vdevice = VDevice()
             
-            # Create input/output params - UINT8 input (quantized), FLOAT32 output (non-quantized)
-            self._input_vstreams_params = InputVStreamParams.make(self._network_group, quantized=True, format_type=FormatType.UINT8)
-            self._output_vstreams_params = OutputVStreamParams.make(self._network_group, quantized=False, format_type=FormatType.FLOAT32)
+            # Get network group
+            network_groups = self._vdevice.configure(self._hef)
+            self._network_group = network_groups[0]
+            
+            # Get input/output info
+            input_vstream_info = self._hef.get_input_vstream_infos()[0]
+            output_vstream_infos = self._hef.get_output_vstream_infos()
             
             # Get input shape
-            input_info = self._hef.get_input_vstream_infos()[0]
-            shape = input_info.shape
+            shape = input_vstream_info.shape
             self._model_height, self._model_width, self._model_channels = shape[0], shape[1], shape[2]
+            
+            # Store for later use
+            self._input_vstream_info = input_vstream_info
+            self._output_vstream_infos = output_vstream_infos
             
             self.get_logger().info(f"Hailo model ready: {self._model_width}x{self._model_height}")
             
@@ -241,10 +239,19 @@ class YOLOPublisher(Node):
         # Convert BGR to RGB - keep as UINT8 (0-255)
         input_data = cv2.cvtColor(input_frame, cv2.COLOR_BGR2RGB)
         
-        # Run inference
-        with InferVStreams(self._network_group, self._input_vstreams_params, self._output_vstreams_params) as infer_pipeline:
-            input_name = list(self._input_vstreams_params.keys())[0]
-            infer_results = infer_pipeline.infer({input_name: input_data})
+        # Run inference using simple async API
+        with self._network_group.activate():
+            # Create input/output vstreams
+            input_vstreams_params = InputVStreamParams.make_from_network_group(
+                self._network_group, quantized=True, format_type=FormatType.UINT8
+            )
+            output_vstreams_params = OutputVStreamParams.make_from_network_group(
+                self._network_group, quantized=False, format_type=FormatType.FLOAT32
+            )
+            
+            with InferVStreams(self._network_group, input_vstreams_params, output_vstreams_params) as infer_pipeline:
+                input_name = list(input_vstreams_params.keys())[0]
+                infer_results = infer_pipeline.infer({input_name: input_data})
         
         # Post-process
         detections = self._postprocess_yolo(infer_results, frame.shape[1], frame.shape[0])
