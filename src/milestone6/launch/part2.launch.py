@@ -106,7 +106,7 @@ def generate_launch_description():
 
     target_bbox_width_arg = DeclareLaunchArgument(
         'target_bbox_width',
-        default_value='180',
+        default_value='300',
         description='Ideal bounding box width for grabbing in pixels'
     )
 
@@ -118,13 +118,13 @@ def generate_launch_description():
 
     turn_speed_arg = DeclareLaunchArgument(
         'turn_speed',
-        default_value='1.0',
+        default_value='0.25',
         description='Angular velocity in rad/s'
     )
 
     transport_distance_arg = DeclareLaunchArgument(
         'transport_distance',
-        default_value='1.0',
+        default_value='0.25',
         description='Distance to transport object in meters (3.2ft = 0.975m)'
     )
 
@@ -140,6 +140,9 @@ def generate_launch_description():
             FindPackageShare('turtlebot3_manipulation_bringup'),
             '/launch/hardware.launch.py'
         ]),
+        launch_arguments={
+            'log_level': 'error'
+        }.items(),
         condition=IfCondition(LaunchConfiguration('include_hardware'))
     )
 
