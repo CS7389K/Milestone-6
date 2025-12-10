@@ -77,8 +77,8 @@ def generate_launch_description():
     # Whisper Publisher Node
     whisper_publisher_node = Node(
         package='milestone6',
-        executable='whisper_publisher',
-        name='whisper_publisher',
+        executable='whisper',
+        name='whisper',
         output='screen',
         parameters=[{
             'device': LaunchConfiguration('device'),
