@@ -113,7 +113,7 @@ def generate_launch_description():
         name='yolo_publisher',
         output='screen',
         parameters=[{
-            'yolo_model': 'yolo11n.pt',
+            'yolo_model': 'models/yolov11n.hef',  # Hailo HEF model for hardware acceleration
             'image_width': 320,   # Reduced from 500 for CPU speed (2.4x fewer pixels)
             'image_height': 192,  # Reduced from 320
             'display': True,
