@@ -41,21 +41,19 @@ class YOLOPublisher(Node):
     Data Types: https://docs.ros2.org/foxy/api/std_msgs/index-msg.html
     """
 
-    _CAPTURE_WIDTH = 640
-    _CAPTURE_HEIGHT = 480
-
     _GSTREAMER_PIPELINE = (
-        'nvarguscamerasrc sensor-id=0 ! video/x-raw(memory:NVMM), ',
-        'width={image_width},height={image_height},framerate=30/1,format=NV12 ! ',
-        'nvvidconv ! video/x-raw,format=BGRx,width={image_width},height={image_height} ! ',
-        'videoconvert ! video/x-raw,format=BGR ! appsink drop=1'
+        'nvarguscamerasrc sensor-id=0 ! '
+        'video/x-raw(memory:NVMM), width={image_width}, height={image_height}, framerate=30/1, format=NV12 ! '
+        'nvvidconv ! video/x-raw, width={image_width}, height={image_height}, format=BGRx ! '
+        'videoconvert ! video/x-raw, format=BGR ! '
+        'appsink max-buffers=1 drop=true sync=false'
     )
 
     def __init__(
         self,
         yolo_model: str = 'yolo11n.pt',
-        image_width: int = 320,
-        image_height: int = 192,
+        image_width: int = 1280,
+        image_height: int = 720,
         display: bool = True,
         camera_backend: str = 'gstreamer',  # 'cv2' or 'gstreamer'
         camera_device: int = 1,
@@ -88,10 +86,10 @@ class YOLOPublisher(Node):
         # Camera selection
         if camera_backend == 'gstreamer':
             if not gstreamer_pipeline:
-                # Example pipeline, user should override as needed
+                # Use requested dimensions in the pipeline
                 gstreamer_pipeline = ''.join(self._GSTREAMER_PIPELINE).format(
-                    image_width=self._CAPTURE_WIDTH,
-                    image_height=self._CAPTURE_HEIGHT
+                    image_width=self._output_width,
+                    image_height=self._output_height
                 )
             self.get_logger().info(
                 f"Opening camera with GStreamer pipeline: {gstreamer_pipeline}")
