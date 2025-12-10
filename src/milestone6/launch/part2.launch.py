@@ -134,6 +134,84 @@ def generate_launch_description():
         description='Detection timeout in seconds'
     )
 
+    # Arm joint position arguments
+    grab_joint2_arg = DeclareLaunchArgument(
+        'grab_joint2', default_value='0.5',
+        description='Grab position: forward reach (radians)'
+    )
+    grab_joint3_arg = DeclareLaunchArgument(
+        'grab_joint3', default_value='-0.3',
+        description='Grab position: extend elbow (radians)'
+    )
+    grab_joint4_arg = DeclareLaunchArgument(
+        'grab_joint4', default_value='0.0',
+        description='Grab position: level gripper (radians)'
+    )
+    grab_vertical_adjust_arg = DeclareLaunchArgument(
+        'grab_vertical_adjust', default_value='0.2',
+        description='Extra reach for low objects (radians)'
+    )
+    grasp_extension_arg = DeclareLaunchArgument(
+        'grasp_extension', default_value='0.2',
+        description='Extra extension to grasp (radians)'
+    )
+
+    lift_joint2_arg = DeclareLaunchArgument(
+        'lift_joint2', default_value='-0.5',
+        description='Lift position: lift up (radians)'
+    )
+    lift_joint3_arg = DeclareLaunchArgument(
+        'lift_joint3', default_value='0.4',
+        description='Lift position: retract (radians)'
+    )
+    lift_joint4_arg = DeclareLaunchArgument(
+        'lift_joint4', default_value='0.6',
+        description='Lift position: adjust wrist (radians)'
+    )
+
+    lower_joint1_arg = DeclareLaunchArgument(
+        'lower_joint1', default_value='0.0',
+        description='Lower position: center (radians)'
+    )
+    lower_joint2_arg = DeclareLaunchArgument(
+        'lower_joint2', default_value='0.3',
+        description='Lower position: down (radians)'
+    )
+    lower_joint3_arg = DeclareLaunchArgument(
+        'lower_joint3', default_value='-0.2',
+        description='Lower position: extend (radians)'
+    )
+    lower_joint4_arg = DeclareLaunchArgument(
+        'lower_joint4', default_value='0.0',
+        description='Lower position: level (radians)'
+    )
+
+    home_joint1_arg = DeclareLaunchArgument(
+        'home_joint1', default_value='0.0',
+        description='Home position: joint1 (radians)'
+    )
+    home_joint2_arg = DeclareLaunchArgument(
+        'home_joint2', default_value='-1.05',
+        description='Home position: joint2 (radians)'
+    )
+    home_joint3_arg = DeclareLaunchArgument(
+        'home_joint3', default_value='0.35',
+        description='Home position: joint3 (radians)'
+    )
+    home_joint4_arg = DeclareLaunchArgument(
+        'home_joint4', default_value='0.70',
+        description='Home position: joint4 (radians)'
+    )
+
+    gripper_open_arg = DeclareLaunchArgument(
+        'gripper_open', default_value='0.025',
+        description='Gripper open position'
+    )
+    gripper_close_arg = DeclareLaunchArgument(
+        'gripper_close', default_value='-0.015',
+        description='Gripper close position'
+    )
+
     # Hardware Launch (conditional)
     hardware_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
@@ -177,6 +255,25 @@ def generate_launch_description():
             'turn_speed': LaunchConfiguration('turn_speed'),
             'detection_timeout': LaunchConfiguration('detection_timeout'),
             'transport_distance': LaunchConfiguration('transport_distance'),
+            # Arm joint positions
+            'grab_joint2': LaunchConfiguration('grab_joint2'),
+            'grab_joint3': LaunchConfiguration('grab_joint3'),
+            'grab_joint4': LaunchConfiguration('grab_joint4'),
+            'grab_vertical_adjust': LaunchConfiguration('grab_vertical_adjust'),
+            'grasp_extension': LaunchConfiguration('grasp_extension'),
+            'lift_joint2': LaunchConfiguration('lift_joint2'),
+            'lift_joint3': LaunchConfiguration('lift_joint3'),
+            'lift_joint4': LaunchConfiguration('lift_joint4'),
+            'lower_joint1': LaunchConfiguration('lower_joint1'),
+            'lower_joint2': LaunchConfiguration('lower_joint2'),
+            'lower_joint3': LaunchConfiguration('lower_joint3'),
+            'lower_joint4': LaunchConfiguration('lower_joint4'),
+            'home_joint1': LaunchConfiguration('home_joint1'),
+            'home_joint2': LaunchConfiguration('home_joint2'),
+            'home_joint3': LaunchConfiguration('home_joint3'),
+            'home_joint4': LaunchConfiguration('home_joint4'),
+            'gripper_open': LaunchConfiguration('gripper_open'),
+            'gripper_close': LaunchConfiguration('gripper_close'),
         }]
     )
 
@@ -194,6 +291,25 @@ def generate_launch_description():
         turn_speed_arg,
         transport_distance_arg,
         detection_timeout_arg,
+        # Arm joint arguments
+        grab_joint2_arg,
+        grab_joint3_arg,
+        grab_joint4_arg,
+        grab_vertical_adjust_arg,
+        grasp_extension_arg,
+        lift_joint2_arg,
+        lift_joint3_arg,
+        lift_joint4_arg,
+        lower_joint1_arg,
+        lower_joint2_arg,
+        lower_joint3_arg,
+        lower_joint4_arg,
+        home_joint1_arg,
+        home_joint2_arg,
+        home_joint3_arg,
+        home_joint4_arg,
+        gripper_open_arg,
+        gripper_close_arg,
         # Hardware (conditional)
         hardware_launch,
         # Nodes

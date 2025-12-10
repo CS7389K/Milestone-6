@@ -25,9 +25,12 @@ Optional Parameters:
 
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -42,7 +45,6 @@ def generate_launch_description():
         DeclareLaunchArgument('camera_device', default_value='1'),
         DeclareLaunchArgument('gstreamer_pipeline', default_value=''),
     ]
-
     # YOLO Publisher Node
     yolo_publisher_node = Node(
         package='milestone6',
@@ -84,9 +86,24 @@ def generate_launch_description():
             'detection_timeout': 0.5,
         }]
     )
+    # Hardware Launch (conditional)
+    hardware_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            FindPackageShare('turtlebot3_manipulation_bringup'),
+            '/launch/hardware.launch.py'
+        ]),
+        launch_arguments={
+            'log_level': 'error'
+        }.items(),
+        condition=IfCondition(LaunchConfiguration('include_hardware'))
+    )
 
     return LaunchDescription([
+        # Launch arguments
         *yolo_args,
+        # Hardware (conditional)
+        hardware_launch,
+        # Nodes
         teleop_publisher_node,
         yolo_publisher_node,
         base_node,

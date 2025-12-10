@@ -79,13 +79,39 @@ class Part2(Node):
         self.declare_parameter('tracking_classes', '39')
         self.declare_parameter('image_width', 1280)
         self.declare_parameter('image_height', 720)
-        self.declare_parameter('bbox_tolerance', 20)  # pixels
-        self.declare_parameter('center_tolerance', 30)  # pixels
-        self.declare_parameter('target_bbox_width', 180)  # pixels
-        self.declare_parameter('forward_speed', 0.15)  # m/s
-        self.declare_parameter('turn_speed', 1.0)  # rad/s
-        self.declare_parameter('detection_timeout', 1)  # seconds
-        self.declare_parameter('transport_distance', 1.0)  # meters
+        self.declare_parameter('bbox_tolerance', 20)        # pixels
+        self.declare_parameter('center_tolerance', 30)      # pixels
+        self.declare_parameter('target_bbox_width', 180)    # pixels
+        self.declare_parameter('forward_speed', 0.15)       # m/s
+        self.declare_parameter('turn_speed', 1.0)           # rad/s
+        self.declare_parameter('detection_timeout', 1)      # seconds
+        self.declare_parameter('transport_distance', 1.0)   # meters
+
+        # Arm joint position parameters (radians)
+        self.declare_parameter('grab_joint2', 0.5)          # Forward reach
+        self.declare_parameter('grab_joint3', -0.3)         # Extend elbow
+        self.declare_parameter('grab_joint4', 0.0)          # Level gripper
+        # Extra reach for low objects
+        self.declare_parameter('grab_vertical_adjust', 0.2)
+        # Extra extension to grasp
+        self.declare_parameter('grasp_extension', 0.2)
+        # Lift positions
+        self.declare_parameter('lift_joint2', -0.5)         # Lift up
+        self.declare_parameter('lift_joint3', 0.4)          # Retract
+        self.declare_parameter('lift_joint4', 0.6)          # Adjust wrist
+        # Lower positions
+        self.declare_parameter('lower_joint1', 0.0)         # Center position
+        self.declare_parameter('lower_joint2', 0.3)         # Lower down
+        self.declare_parameter('lower_joint3', -0.2)        # Extend
+        self.declare_parameter('lower_joint4', 0.0)         # Level
+        # Home positions
+        self.declare_parameter('home_joint1', 0.0)          # Home position
+        self.declare_parameter('home_joint2', -1.05)
+        self.declare_parameter('home_joint3', 0.35)
+        self.declare_parameter('home_joint4', 0.70)
+        # Gripper position parameters
+        self.declare_parameter('gripper_open', 0.025)       # Open position
+        self.declare_parameter('gripper_close', -0.025)     # Close position
 
         tracking_classes = self.get_parameter('tracking_classes').value
         self.image_width = self.get_parameter('image_width').value
@@ -98,6 +124,25 @@ class Part2(Node):
         self.detection_timeout = self.get_parameter('detection_timeout').value
         self.transport_distance = self.get_parameter(
             'transport_distance').value
+        self.grab_joint2 = self.get_parameter('grab_joint2').value
+        self.grab_joint3 = self.get_parameter('grab_joint3').value
+        self.grab_joint4 = self.get_parameter('grab_joint4').value
+        self.grab_vertical_adjust = self.get_parameter(
+            'grab_vertical_adjust').value
+        self.grasp_extension = self.get_parameter('grasp_extension').value
+        self.lift_joint2 = self.get_parameter('lift_joint2').value
+        self.lift_joint3 = self.get_parameter('lift_joint3').value
+        self.lift_joint4 = self.get_parameter('lift_joint4').value
+        self.lower_joint1 = self.get_parameter('lower_joint1').value
+        self.lower_joint2 = self.get_parameter('lower_joint2').value
+        self.lower_joint3 = self.get_parameter('lower_joint3').value
+        self.lower_joint4 = self.get_parameter('lower_joint4').value
+        self.home_joint1 = self.get_parameter('home_joint1').value
+        self.home_joint2 = self.get_parameter('home_joint2').value
+        self.home_joint3 = self.get_parameter('home_joint3').value
+        self.home_joint4 = self.get_parameter('home_joint4').value
+        self.gripper_open = self.get_parameter('gripper_open').value
+        self.gripper_close = self.get_parameter('gripper_close').value
 
         # Parse tracking classes from comma-separated string or single integer
         if isinstance(tracking_classes, str):
@@ -340,13 +385,13 @@ class Part2(Node):
 
         # Joints 2-4: Forward reach configuration
         # These values position arm for grabbing at optimal distance
-        joint2 = 0.5    # Forward reach
-        joint3 = -0.3   # Extend elbow
-        joint4 = 0.0    # Level gripper
+        joint2 = self.grab_joint2
+        joint3 = self.grab_joint3
+        joint4 = self.grab_joint4
 
         # Adjust reach based on vertical position
         if norm_y > 0.2:  # Object low in frame
-            joint2 += 0.2  # Reach down more
+            joint2 += self.grab_vertical_adjust  # Reach down more
 
         return {
             'joint1': joint1,
@@ -415,36 +460,36 @@ class Part2(Node):
             self._execute_grab_sequence()
 
         # ==================== TRANSPORTING ====================
-        if self.state == State.TRANSPORTING:
-            if self.transport_start_time is None:
-                # Calculate how long to move forward
-                self.transport_duration = self.transport_distance / self.forward_speed
-                self.transport_start_time = self.get_clock().now()
+        # if self.state == State.TRANSPORTING:
+        #     if self.transport_start_time is None:
+        #         # Calculate how long to move forward
+        #         self.transport_duration = self.transport_distance / self.forward_speed
+        #         self.transport_start_time = self.get_clock().now()
 
-                self.get_logger().info(f"\n{'=' * 70}")
-                self.get_logger().info(f"[TRANSPORTING] Moving forward {self.transport_distance}m "
-                                       f"(~{self.transport_duration:.1f}s)")
-                self.get_logger().info(f"{'=' * 70}")
+        #         self.get_logger().info(f"\n{'=' * 70}")
+        #         self.get_logger().info(f"[TRANSPORTING] Moving forward {self.transport_distance}m "
+        #                                f"(~{self.transport_duration:.1f}s)")
+        #         self.get_logger().info(f"{'=' * 70}")
 
-                # Start moving forward
-                self.teleop_pub.set_velocity(
-                    linear_x=self.forward_speed, angular_z=0.0)
-            else:
-                # Check if we've moved far enough
-                elapsed = (self.get_clock().now() -
-                           self.transport_start_time).nanoseconds / 1e9
+        #         # Start moving forward
+        #         self.teleop_pub.set_velocity(
+        #             linear_x=self.forward_speed, angular_z=0.0)
+        #     else:
+        #         # Check if we've moved far enough
+        #         elapsed = (self.get_clock().now() -
+        #                    self.transport_start_time).nanoseconds / 1e9
 
-                if elapsed >= self.transport_duration:
-                    self.stop_base()
-                    self.get_logger().info(f"[TRANSPORTING] Traveled {self.transport_distance}m! "
-                                           f"Starting RELEASING sequence...")
-                    self.release_step = 0
-                    self.state = State.RELEASING
-                else:
-                    remaining = self.transport_duration - elapsed
-                    if int(remaining) != int(remaining + 0.1):  # Log every second
-                        self.get_logger().info(
-                            f"Transporting... {remaining:.0f}s remaining")
+        #         if elapsed >= self.transport_duration:
+        #             self.stop_base()
+        #             self.get_logger().info(f"[TRANSPORTING] Traveled {self.transport_distance}m! "
+        #                                    f"Starting RELEASING sequence...")
+        #             self.release_step = 0
+        #             self.state = State.RELEASING
+        #         else:
+        #             remaining = self.transport_duration - elapsed
+        #             if int(remaining) != int(remaining + 0.1):  # Log every second
+        #                 self.get_logger().info(
+        #                     f"Transporting... {remaining:.0f}s remaining")
 
         # ==================== RELEASING ====================
         if self.state == State.RELEASING:
@@ -471,7 +516,7 @@ class Part2(Node):
         if self.grab_step == 0:
             self.get_logger().info("[GRAB] Step 0: Opening gripper...")
             self.gripper_action_future = self.send_gripper_command(
-                0.025)  # Open
+                self.gripper_open)
             self.step_start_time = self.get_clock().now()
             self.grab_step = 1
 
@@ -498,9 +543,9 @@ class Part2(Node):
                 current = self.teleop_sub.joint_positions
                 grasp_pos = {
                     'joint1': current.get('joint1', 0.0),
-                    'joint2': current.get('joint2', 0.5),
-                    'joint3': min(1.5, current.get('joint3', -0.3) + 0.2),
-                    'joint4': current.get('joint4', 0.0)
+                    'joint2': current.get('joint2', self.grab_joint2),
+                    'joint3': min(1.5, current.get('joint3', self.grab_joint3) + self.grasp_extension),
+                    'joint4': current.get('joint4', self.grab_joint4)
                 }
                 self.arm_action_future = self.send_arm_trajectory(
                     grasp_pos, time_sec=1.5)
@@ -513,8 +558,8 @@ class Part2(Node):
                        self.step_start_time).nanoseconds / 1e9
             if elapsed >= 2.0:
                 self.get_logger().info("[GRAB] Step 3: Closing gripper...")
-                # Close
-                self.gripper_action_future = self.send_gripper_command(-0.015)
+                self.gripper_action_future = self.send_gripper_command(
+                    self.gripper_close)
                 self.step_start_time = self.get_clock().now()
                 self.grab_step = 4
 
@@ -526,9 +571,9 @@ class Part2(Node):
                 self.get_logger().info("[GRAB] Step 4: Lifting object...")
                 lift_pos = {
                     'joint1': self.teleop_sub.joint_positions.get('joint1', 0.0),
-                    'joint2': -0.5,  # Lift up
-                    'joint3': 0.4,   # Retract
-                    'joint4': 0.6    # Adjust wrist
+                    'joint2': self.lift_joint2,
+                    'joint3': self.lift_joint3,
+                    'joint4': self.lift_joint4
                 }
                 self.arm_action_future = self.send_arm_trajectory(
                     lift_pos, time_sec=2.0)
@@ -553,10 +598,10 @@ class Part2(Node):
             self.get_logger().info(
                 "[RELEASE] Step 0: Lowering arm to place object...")
             lower_pos = {
-                'joint1': 0.0,
-                'joint2': 0.4,   # Lower down
-                'joint3': -0.2,  # Extend
-                'joint4': 0.0
+                'joint1': self.lower_joint1,
+                'joint2': self.lower_joint2,
+                'joint3': self.lower_joint3,
+                'joint4': self.lower_joint4
             }
             self.arm_action_future = self.send_arm_trajectory(
                 lower_pos, time_sec=2.0)
@@ -571,7 +616,7 @@ class Part2(Node):
                 self.get_logger().info(
                     "[RELEASE] Step 1: Opening gripper to release...")
                 self.gripper_action_future = self.send_gripper_command(
-                    0.025)  # Open
+                    self.gripper_open)
                 self.step_start_time = self.get_clock().now()
                 self.release_step = 2
 
@@ -583,10 +628,10 @@ class Part2(Node):
                 self.get_logger().info(
                     "[RELEASE] Step 2: Retracting arm to home position...")
                 home_pos = {
-                    'joint1': 0.0,
-                    'joint2': -1.05,
-                    'joint3': 0.35,
-                    'joint4': 0.70
+                    'joint1': self.home_joint1,
+                    'joint2': self.home_joint2,
+                    'joint3': self.home_joint3,
+                    'joint4': self.home_joint4
                 }
                 self.arm_action_future = self.send_arm_trajectory(
                     home_pos, time_sec=2.0)
