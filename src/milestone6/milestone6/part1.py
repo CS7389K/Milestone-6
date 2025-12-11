@@ -26,6 +26,8 @@ class Part1(Robot):
 
     def __init__(self):
         super().__init__('part1')
+        self.info("Initialized Part 1: Visual Servoing (Centering Only).")
+        self.info(f"Parameters: {self.parameters}")
         self._is_moving = False
 
     def _tick(self):

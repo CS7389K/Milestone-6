@@ -83,6 +83,7 @@ class Part2(Robot):
         super().__init__('part2')
 
         self.info("Initializing Part 2: Complete Grab and Transport Sequence...")
+        self.info(f"Parameters: {self.parameters}")
 
         # ------------------- Action Clients -------------------
         self.arm_client = ActionClient(

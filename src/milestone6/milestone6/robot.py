@@ -81,7 +81,6 @@ class Robot(Node, ABC):
         for param_name, default_value in params.items():
             self.declare_parameter(param_name, default_value)
             self.__setattr__(param_name, self.get_parameter(param_name).value)
-        self.info(f"Parameters: {self.parameters}")
 
         # Track when we last saw the target object
         self.last_detection_time = None
