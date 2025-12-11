@@ -76,7 +76,7 @@ class WhisperPublisher(Node):
         Waits for audio above threshold before starting recording.
         """
         try:
-            self.get_logger().info("[WHISPER] Listening for voice activity...")
+            self.get_logger().info("Listening for voice activity...")
 
             # Wait for voice activity (threshold detection)
             chunk_duration = 0.1  # Check every 100ms
@@ -98,12 +98,12 @@ class WhisperPublisher(Node):
                 if np.max(np.abs(chunk)) > self.audio_threshold:
                     voice_detected = True
                     self.get_logger().info(
-                        "[WHISPER] Voice detected! Recording...")
+                        "Voice detected! Recording...")
                     break
 
             if not voice_detected:
                 self.get_logger().debug(
-                    "[WHISPER] No voice detected within timeout")
+                    "No voice detected within timeout")
                 return
 
             # Record audio for specified duration
@@ -118,10 +118,10 @@ class WhisperPublisher(Node):
             # Save to file
             write(self.audio_file, self.audio_sample_rate, audio)
             self.get_logger().info(
-                f"[WHISPER] Recording saved to {self.audio_file}")
+                f"Recording saved to {self.audio_file}")
 
             # Transcribe the audio
-            self.get_logger().info("[WHISPER] Transcribing...")
+            self.get_logger().info("Transcribing...")
             text = self.whisper(self.audio_file).strip().lower()
 
             if text:
@@ -130,9 +130,9 @@ class WhisperPublisher(Node):
                 msg.data = text
                 self.voice_transcription.publish(msg)
                 self.get_logger().info(
-                    f"[WHISPER] Published to /voice_transcription: '{text}'")
+                    f"Published to /voice_transcription: '{text}'")
             else:
-                self.get_logger().warn("[WHISPER] No speech detected in audio")
+                self.get_logger().warn("No speech detected in audio")
 
         except Exception as e:
             self.get_logger().error(f"Listen failed: {e}")
