@@ -25,14 +25,16 @@ Usage:
 
 Optional Parameters:
     yolo_model:=<path>          YOLO model file (default: yolo11n.pt)
-    image_width:=<int>          Camera width (default: 500)
-    image_height:=<int>         Camera height (default: 320)
+    image_width:=<int>          Camera width (default: 1280)
+    image_height:=<int>         Camera height (default: 720)
     display:=<bool>             Show YOLO window (default: true)
     tracking_classes:=<str>     Comma-separated COCO class IDs (default: '39' for bottle)
+    bbox_tolerance:=<int>       Bbox width tolerance px (default: 20)
     center_tolerance:=<int>     Centering tolerance px (default: 30)
     target_bbox_width:=<int>    Ideal bbox width (default: 180)
-    forward_speed:=<float>      Linear velocity m/s (default: 0.15)
+    speed:=<float>              Linear velocity m/s (default: 0.15)
     turn_speed:=<float>         Angular velocity rad/s (default: 1.0)
+    detection_timeout:=<float>  Detection timeout seconds (default: 1.0)
     transport_distance:=<float> Transport distance meters (default: 1.0)
 
 Examples:
@@ -98,6 +100,12 @@ def generate_launch_description():
         description='Comma-separated COCO class IDs to track (e.g., "39,41" for bottle and cup)'
     )
 
+    bbox_tolerance_arg = DeclareLaunchArgument(
+        'bbox_tolerance',
+        default_value='20',
+        description='Bounding box width tolerance in pixels'
+    )
+
     center_tolerance_arg = DeclareLaunchArgument(
         'center_tolerance',
         default_value='30',
@@ -106,41 +114,41 @@ def generate_launch_description():
 
     target_bbox_width_arg = DeclareLaunchArgument(
         'target_bbox_width',
-        default_value='365',
+        default_value='180',
         description='Ideal bounding box width for grabbing in pixels'
     )
 
-    forward_speed_arg = DeclareLaunchArgument(
-        'forward_speed',
-        default_value='0.05',
+    speed_arg = DeclareLaunchArgument(
+        'speed',
+        default_value='0.15',
         description='Linear velocity in m/s'
     )
 
     turn_speed_arg = DeclareLaunchArgument(
         'turn_speed',
-        default_value='0.25',
+        default_value='1.0',
         description='Angular velocity in rad/s'
     )
 
     transport_distance_arg = DeclareLaunchArgument(
         'transport_distance',
-        default_value='0.10',
-        description='Distance to transport object in meters (3.2ft = 0.975m)'
+        default_value='1.0',
+        description='Distance to transport object in meters'
     )
 
     detection_timeout_arg = DeclareLaunchArgument(
         'detection_timeout',
-        default_value='1',
+        default_value='1.0',
         description='Detection timeout in seconds'
     )
 
     # Arm joint position arguments
     grab_joint2_arg = DeclareLaunchArgument(
-        'grab_joint2', default_value='0.95',
+        'grab_joint2', default_value='0.5',
         description='Grab position: forward reach (radians)'
     )
     grab_joint3_arg = DeclareLaunchArgument(
-        'grab_joint3', default_value='-0.65',
+        'grab_joint3', default_value='-0.3',
         description='Grab position: extend elbow (radians)'
     )
     grab_joint4_arg = DeclareLaunchArgument(
@@ -174,15 +182,15 @@ def generate_launch_description():
         description='Lower position: center (radians)'
     )
     lower_joint2_arg = DeclareLaunchArgument(
-        'lower_joint2', default_value='0.6',
+        'lower_joint2', default_value='0.3',
         description='Lower position: down (radians)'
     )
     lower_joint3_arg = DeclareLaunchArgument(
-        'lower_joint3', default_value='-0.4',
+        'lower_joint3', default_value='-0.2',
         description='Lower position: extend (radians)'
     )
     lower_joint4_arg = DeclareLaunchArgument(
-        'lower_joint4', default_value='0.6',
+        'lower_joint4', default_value='0.0',
         description='Lower position: level (radians)'
     )
 
@@ -208,7 +216,7 @@ def generate_launch_description():
         description='Gripper open position'
     )
     gripper_close_arg = DeclareLaunchArgument(
-        'gripper_close', default_value='-0.015',
+        'gripper_close', default_value='-0.025',
         description='Gripper close position'
     )
 
@@ -248,11 +256,11 @@ def generate_launch_description():
             'tracking_classes': LaunchConfiguration('tracking_classes'),
             'image_width': LaunchConfiguration('image_width'),
             'image_height': LaunchConfiguration('image_height'),
-            'bbox_tolerance': 20,
+            'speed': LaunchConfiguration('speed'),
+            'turn_speed': LaunchConfiguration('turn_speed'),
+            'bbox_tolerance': LaunchConfiguration('bbox_tolerance'),
             'center_tolerance': LaunchConfiguration('center_tolerance'),
             'target_bbox_width': LaunchConfiguration('target_bbox_width'),
-            'forward_speed': LaunchConfiguration('forward_speed'),
-            'turn_speed': LaunchConfiguration('turn_speed'),
             'detection_timeout': LaunchConfiguration('detection_timeout'),
             'transport_distance': LaunchConfiguration('transport_distance'),
             # Arm joint positions
@@ -285,9 +293,10 @@ def generate_launch_description():
         image_height_arg,
         display_arg,
         tracking_classes_arg,
+        bbox_tolerance_arg,
         center_tolerance_arg,
         target_bbox_width_arg,
-        forward_speed_arg,
+        speed_arg,
         turn_speed_arg,
         transport_distance_arg,
         detection_timeout_arg,

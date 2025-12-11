@@ -15,7 +15,7 @@ States:
     CENTERING     -> Rotating base to center object in frame
     APPROACHING   -> Moving forward to optimal grab distance
     GRABBING      -> Executing arm grab sequence
-    TRANSPORTING  -> Moving forward 1 meter with object
+    TRANSPORTING  -> Moving forward with object
     RELEASING     -> Placing object and retracting arm
     DONE          -> Complete
 
@@ -35,14 +35,13 @@ from milestone6.teleop.subscriber import TeleopSubscriber
 
 class State(Enum):
     """States for complete grab and transport sequence."""
-    IDLE = 1
-    CENTERING = 2
-    APPROACHING = 3
-    GRABBING = 4
-    TRANSPORTING = 5
-    RELEASING = 6
-    DONE = 7
-
+    IDLE = 1            # Waiting for object detection
+    CENTERING = 2       # Rotating base to center object in frame
+    APPROACHING = 3     # Moving forward to optimal grab distance
+    GRABBING = 4        # Executing arm grab sequence
+    TRANSPORTING = 5    # Moving forward with object
+    RELEASING = 6       # Placing object and retracting arm
+    DONE = 7            # Complete
 
 class Part2(Robot):
     """
