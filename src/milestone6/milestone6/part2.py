@@ -168,7 +168,7 @@ class Part2(Robot):
 
         # --------------------------------- GRABBING --------------------------------- #
         if self.state == State.GRABBING:
-            self.execute_grab_sequence()
+            self.execute_grab_sequence(next_state=State.TRANSPORTING)
 
         # ------------------------------- TRANSPORTING ------------------------------- #
         if self.state == State.TRANSPORTING:
@@ -204,7 +204,7 @@ class Part2(Robot):
 
         # --------------------------------- RELEASING -------------------------------- #
         if self.state == State.RELEASING:
-            self.execute_release_sequence()
+            self.execute_release_sequence(next_state=State.DONE)
 
         # ----------------------------------- DONE ----------------------------------- #
         if self.state == State.DONE:
@@ -223,8 +223,12 @@ class Part2(Robot):
     # ---------------------------------------------------------------------------- #
     #                                Helper Methods                                #
     # ---------------------------------------------------------------------------- #
-    def execute_grab_sequence(self):
-        """Multi-step grabbing sequence using FollowJointTrajectory."""
+    def execute_grab_sequence(self, next_state):
+        """Multi-step grabbing sequence using FollowJointTrajectory.
+
+        Args:
+            next_state: The state to transition to after grab completes
+        """
 
         # Step 0: Open gripper
         if self.grab_step == 0:
@@ -302,10 +306,14 @@ class Part2(Robot):
                 self.info(
                     "[GRAB] Object grabbed! Moving to TRANSPORTING...")
                 self.grab_step = 0
-                self.state = State.TRANSPORTING
+                self.state = next_state
 
-    def execute_release_sequence(self):
-        """Multi-step release sequence."""
+    def execute_release_sequence(self, next_state):
+        """Multi-step release sequence.
+
+        Args:
+            next_state: The state to transition to after release completes
+        """
 
         # Step 0: Lower arm
         if self.release_step == 0:
@@ -359,7 +367,7 @@ class Part2(Robot):
             if elapsed >= 2.5:
                 self.info("[RELEASE] Release complete!")
                 self.release_step = 0
-                self.state = State.DONE
+                self.state = next_state
 
 
 def main(args=None):

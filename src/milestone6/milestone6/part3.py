@@ -25,8 +25,6 @@ import rclpy
 from std_msgs.msg import String
 
 from milestone6.part2 import Part2
-from milestone6.util.coco import COCO_CLASSES
-from milestone6.yolo.yolo_data import YOLOData
 
 
 class State(Enum):
@@ -264,7 +262,7 @@ class Part3(Part2):
 
         # ==================== GRABBING (Part 2) ====================
         elif self.state == State.GRABBING:
-            self.execute_grab_sequence()
+            self.execute_grab_sequence(next_state=State.TRANSPORTING)
 
         # ==================== TRANSPORTING (Part 2) ====================
         elif self.state == State.TRANSPORTING:
@@ -290,7 +288,7 @@ class Part3(Part2):
 
         # ==================== RELEASING (Part 2) ====================
         elif self.state == State.RELEASING:
-            self.execute_release_sequence()
+            self.execute_release_sequence(next_state=State.DONE)
 
         # ==================== DONE ====================
         elif self.state == State.DONE:
@@ -309,9 +307,6 @@ class Part3(Part2):
             self.state = State.VOICE_SEARCH
             self.last_prompt_time = self.get_clock().now()
 
-    # ---------------------------------------------------------------------------- #
-    #                             Shutdown Override                                #
-    # ---------------------------------------------------------------------------- #
 
 def main(args=None):
     rclpy.init(args=args)
