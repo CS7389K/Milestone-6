@@ -59,7 +59,7 @@ class Part4(Part2):
 
     # Override and extend Part2 parameters
     PARAMETERS = {
-        'tracking_classes': '39,77,64', # bottle, bear, mouse
+        'tracking_classes': '39,77,64',  # bottle, bear, mouse
         'turn_duration': 1.0,           # seconds
         'forward_duration': 0.5,        # seconds
         'scan_speed': 0.5,              # rad/s
@@ -69,7 +69,7 @@ class Part4(Part2):
     def __init__(self):
         # Initialize Part2 first with 'part4' node name
         # Note: Robot base class uses node_name parameter
-        super().__init__()
+        super().__init__('part4')
 
         # Override the state to Part4's initial state
         self.state = State.LLM_GUIDED
@@ -86,7 +86,8 @@ class Part4(Part2):
         self.current_target = None      # 'bottle', 'bear', or 'mouse'
         self.held_object = None         # Track if holding bottle
         self.placement_target = None    # Target object for placement
-        self.place_step = 0             # Step counter for placement sequence
+
+        # Note: grab_step, release_step, and step_start_time inherited from Part2
 
         # ------------------- LLM Communication -------------------
         # LLM action subscriber
@@ -98,7 +99,8 @@ class Part4(Part2):
         )
 
         # Text-to-speech publisher
-        self.tts_pub = self.create_publisher(String, '/text_to_speech', 10)
+        self.tts_publisher = self.create_publisher(
+            String, '/text_to_speech', 10)
 
         self.info("Part 4 initialized - LLM-Guided Mission")
         self.info(f"Tracking classes: {self.tracking_classes}")
@@ -166,7 +168,7 @@ class Part4(Part2):
         """Get COCO class ID for object name."""
         mapping = {
             'bottle': 39,
-            'bear': 73,
+            'bear': 77,
             'mouse': 64
         }
         return mapping.get(obj_name, 39)
@@ -226,8 +228,10 @@ class Part4(Part2):
         elif action == 'GRAB':
             # Transition to visual servoing for grabbing
             if self.detection_is_fresh():
+                self.grab_step = 0  # Initialize grab sequence
                 self.state = State.CENTERING
                 self._speak("Engaging visual servoing for grab")
+                self._finish_action()
             else:
                 self._speak("No object detected, cannot grab")
                 self._finish_action()
@@ -244,8 +248,10 @@ class Part4(Part2):
         elif action == 'PLACE':
             # Check if we have a target object in view
             if self.detection_is_fresh() and self.held_object:
+                self.release_step = 0  # Initialize release sequence
                 self.state = State.PLACING
                 self._speak("Placing object")
+                self._finish_action()
             else:
                 self._speak("Need to locate placement target first")
                 self._finish_action()
@@ -322,9 +328,9 @@ class Part4(Part2):
             if self.detection_is_fresh():
                 if self.is_at_grab_distance(self.last_yolo_data):
                     self.stop_movement()
-                    self.state = State.GRABBING
                     self.info("At grab distance! Executing grab...")
                     self.grab_step = 0
+                    self.state = State.GRABBING
                 else:
                     self.approach_object(self.last_yolo_data)
             else:
@@ -333,34 +339,20 @@ class Part4(Part2):
                 self.state = State.LLM_GUIDED
 
         elif self.state == State.GRABBING:
-            # Use Part2's execute_grab_sequence
-            self.execute_grab_sequence()
-            # Check if grab completed and transition to TRANSPORTING
-            if self.grab_step == 0 and self.state != State.GRABBING:
-                self.state = State.TRANSPORTING
+            # Use Part2's execute_grab_sequence with next_state parameter
+            self.execute_grab_sequence(next_state=State.TRANSPORTING)
 
         elif self.state == State.TRANSPORTING:
             # Continue accepting LLM actions while transporting
             pass
 
         elif self.state == State.PLACING:
-            # Execute placement sequence
-            self._execute_place_sequence()
+            # Use Part2's execute_release_sequence with next_state parameter
+            self.execute_release_sequence(next_state=State.DONE)
 
         elif self.state == State.DONE:
             self.stop_movement()
             # Mission complete
-
-    # ------------------------------------------------------------------
-    # Placement Sequence (Part 4 specific)
-    # ------------------------------------------------------------------
-    def _execute_place_sequence(self):
-        """Execute placement sequence - similar to Part2's release."""
-        # Use Part2's execute_release_sequence
-        self.execute_release_sequence()
-        # Check if release completed
-        if self.release_step == 0 and self.state != State.RELEASING:
-            self.state = State.DONE
 
 
 def main(args=None):
