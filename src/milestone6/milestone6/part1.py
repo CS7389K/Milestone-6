@@ -11,8 +11,8 @@ Usage:
 """
 import rclpy
 
-from milestone6.milestone6.robot import Robot
-from milestone6.milestone6.yolo.yolo_data import YOLOData
+from milestone6.robot import Robot
+from milestone6.yolo.yolo_data import YOLOData
 
 
 class Part1(Robot):

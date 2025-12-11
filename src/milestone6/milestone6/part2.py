@@ -23,24 +23,14 @@ Usage:
     ros2 run milestone6 part2
 """
 
-import math
 from enum import Enum
 
 import rclpy
-from builtin_interfaces.msg import Duration
-from control_msgs.action import FollowJointTrajectory, GripperCommand
 from rclpy.action import ActionClient
-from rclpy.node import Node
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from control_msgs.action import FollowJointTrajectory, GripperCommand
 
-# Base and Arm control
-from milestone6.teleop.publisher import TeleopPublisher
-from milestone6.teleop.subscriber import TeleopSubscriber
-from milestone6.util.coco import COCO_CLASSES
-
-# YOLO detection
-from milestone6.yolo.subscriber import YOLOSubscriber
-from milestone6.yolo.yolo_data import YOLOData
+from milestone6.milestone6.part1 import Part1
+from milestone6.milestone6.teleop.subscriber import TeleopSubscriber
 
 
 class State(Enum):
@@ -54,104 +44,45 @@ class State(Enum):
     DONE = 7          # Complete
 
 
-class Part2(Node):
+class Part2(Part1):
     """
     Complete Part 2 implementation with object centering,
     grabbing using FollowJointTrajectory, transport, and release.
+    
+    Extends Part1 to add state machine for grab-transport-release sequence.
     """
+
+    PARAMETERS = {
+        'detection_timeout': 1.0,       # seconds (override Part1's 0.5s)
+        'transport_distance': 1.0,      # meters
+        # Arm joint position parameters (radians)
+        'grab_joint2': 0.5,             # Forward reach
+        'grab_joint3': -0.3,            # Extend elbow
+        'grab_joint4': 0.0,             # Level gripper
+        'grab_vertical_adjust': 0.2,    # Extra reach for low objects
+        'grasp_extension': 0.2,         # Extra extension to grasp
+        # Lift positions
+        'lift_joint2': -0.5,            # Lift up
+        'lift_joint3': 0.4,             # Retract
+        'lift_joint4': 0.6,             # Adjust wrist
+        # Lower positions
+        'lower_joint1': 0.0,            # Center position
+        'lower_joint2': 0.3,            # Lower down
+        'lower_joint3': -0.2,           # Extend
+        'lower_joint4': 0.0,            # Level
+        # Home positions
+        'home_joint1': 0.0,             # Home position
+        'home_joint2': -1.05,
+        'home_joint3': 0.35,
+        'home_joint4': 0.70,
+        # Gripper position parameters
+        'gripper_open': 0.025,          # Open position
+        'gripper_close': -0.025,        # Close position
+    }
 
     def __init__(self):
         super().__init__('part2')
-
-        # ------------------- Parameters -------------------
-        # Comma-separated COCO class IDs
-        self.declare_parameter('tracking_classes', '39')
-        self.declare_parameter('image_width', 1280)
-        self.declare_parameter('image_height', 720)
-        self.declare_parameter('bbox_tolerance', 20)        # pixels
-        self.declare_parameter('center_tolerance', 30)      # pixels
-        self.declare_parameter('target_bbox_width', 180)    # pixels
-        self.declare_parameter('forward_speed', 0.15)       # m/s
-        self.declare_parameter('turn_speed', 1.0)           # rad/s
-        self.declare_parameter('detection_timeout', 1)      # seconds
-        self.declare_parameter('transport_distance', 1.0)   # meters
-
-        # Arm joint position parameters (radians)
-        self.declare_parameter('grab_joint2', 0.5)          # Forward reach
-        self.declare_parameter('grab_joint3', -0.3)         # Extend elbow
-        self.declare_parameter('grab_joint4', 0.0)          # Level gripper
-        # Extra reach for low objects
-        self.declare_parameter('grab_vertical_adjust', 0.2)
-        # Extra extension to grasp
-        self.declare_parameter('grasp_extension', 0.2)
-        # Lift positions
-        self.declare_parameter('lift_joint2', -0.5)         # Lift up
-        self.declare_parameter('lift_joint3', 0.4)          # Retract
-        self.declare_parameter('lift_joint4', 0.6)          # Adjust wrist
-        # Lower positions
-        self.declare_parameter('lower_joint1', 0.0)         # Center position
-        self.declare_parameter('lower_joint2', 0.3)         # Lower down
-        self.declare_parameter('lower_joint3', -0.2)        # Extend
-        self.declare_parameter('lower_joint4', 0.0)         # Level
-        # Home positions
-        self.declare_parameter('home_joint1', 0.0)          # Home position
-        self.declare_parameter('home_joint2', -1.05)
-        self.declare_parameter('home_joint3', 0.35)
-        self.declare_parameter('home_joint4', 0.70)
-        # Gripper position parameters
-        self.declare_parameter('gripper_open', 0.025)       # Open position
-        self.declare_parameter('gripper_close', -0.025)     # Close position
-
-        tracking_classes = self.get_parameter('tracking_classes').value
-        self.image_width = self.get_parameter('image_width').value
-        self.image_height = self.get_parameter('image_height').value
-        self.bbox_tolerance = self.get_parameter('bbox_tolerance').value
-        self.center_tolerance = self.get_parameter('center_tolerance').value
-        self.target_bbox_width = self.get_parameter('target_bbox_width').value
-        self.forward_speed = self.get_parameter('forward_speed').value
-        self.turn_speed = self.get_parameter('turn_speed').value
-        self.detection_timeout = self.get_parameter('detection_timeout').value
-        self.transport_distance = self.get_parameter(
-            'transport_distance').value
-        self.grab_joint2 = self.get_parameter('grab_joint2').value
-        self.grab_joint3 = self.get_parameter('grab_joint3').value
-        self.grab_joint4 = self.get_parameter('grab_joint4').value
-        self.grab_vertical_adjust = self.get_parameter(
-            'grab_vertical_adjust').value
-        self.grasp_extension = self.get_parameter('grasp_extension').value
-        self.lift_joint2 = self.get_parameter('lift_joint2').value
-        self.lift_joint3 = self.get_parameter('lift_joint3').value
-        self.lift_joint4 = self.get_parameter('lift_joint4').value
-        self.lower_joint1 = self.get_parameter('lower_joint1').value
-        self.lower_joint2 = self.get_parameter('lower_joint2').value
-        self.lower_joint3 = self.get_parameter('lower_joint3').value
-        self.lower_joint4 = self.get_parameter('lower_joint4').value
-        self.home_joint1 = self.get_parameter('home_joint1').value
-        self.home_joint2 = self.get_parameter('home_joint2').value
-        self.home_joint3 = self.get_parameter('home_joint3').value
-        self.home_joint4 = self.get_parameter('home_joint4').value
-        self.gripper_open = self.get_parameter('gripper_open').value
-        self.gripper_close = self.get_parameter('gripper_close').value
-
-        # Parse tracking classes from comma-separated string or single integer
-        if isinstance(tracking_classes, str):
-            self.tracking_classes = [
-                int(c.strip()) for c in tracking_classes.split(',') if c.strip()]
-        else:
-            # Handle case where parameter is already an integer
-            self.tracking_classes = [int(tracking_classes)]
-
-        # ------------------- YOLO Subscriber -------------------
-        self.get_logger().info("Starting YOLO Subscriber...")
-        self.yolo_subscriber = YOLOSubscriber(self, self._yolo_callback)
-
-        # ------------------- Teleop Control -------------------
-        self.get_logger().info("Starting Teleop Publisher...")
-        self.teleop_pub = TeleopPublisher(self)
-
-        self.get_logger().info("Starting Joint State Subscriber...")
-        self.teleop_sub = TeleopSubscriber(self)
-
+        
         # ------------------- Action Clients -------------------
         self.arm_client = ActionClient(
             self,
@@ -164,10 +95,12 @@ class Part2(Node):
             '/gripper_controller/gripper_cmd'
         )
 
+        # ------------------- Joint State Subscriber -------------------
+        self.info("Starting Joint State Subscriber...")
+        self.teleop_sub = TeleopSubscriber(self)
+
         # ------------------- State Machine -------------------
         self.state = State.IDLE
-        self.last_detection_time = None
-        self.last_yolo_data = None
 
         # Sub-state tracking for multi-step operations
         self.grab_step = 0
@@ -182,14 +115,7 @@ class Part2(Node):
         self.arm_action_future = None
         self.gripper_action_future = None
 
-        # ------------------- Timer -------------------
-        self.timer = self.create_timer(0.1, self.tick)  # 10 Hz
-
-        class_names = [COCO_CLASSES.get(
-            cls, f'unknown({cls})') for cls in self.tracking_classes]
-        self.get_logger().info(
-            f"Tracking COCO classes: {', '.join([f'{name} (ID: {cls})' for name, cls in zip(class_names, self.tracking_classes)])}")
-        self.get_logger().info("Part 2 Node Initialized. Waiting for detections...")
+        self.info("Part 2 Node Initialized. Waiting for detections...")
 
     # ------------------------------------------------------------------
     # YOLO Callback
