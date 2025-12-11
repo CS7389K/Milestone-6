@@ -2,6 +2,7 @@
 """Utility functions and classes for launch files."""
 
 from dataclasses import dataclass
+from typing import Dict, List
 
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
@@ -37,7 +38,7 @@ class LaunchArg:
         )
 
     @staticmethod
-    def generate_launch_arguments(*arg_dicts) -> list[DeclareLaunchArgument]:
+    def generate_launch_arguments(*arg_dicts) -> List[DeclareLaunchArgument]:
         """Convert one or more LAUNCH_ARGS dictionaries to DeclareLaunchArgument list.
 
         Args:
@@ -64,7 +65,7 @@ class LaunchArg:
         return result
 
     @staticmethod
-    def generate_launch_configs(keys: list[str]) -> dict[str, LaunchConfiguration]:
+    def generate_launch_configs(keys: List[str]) -> Dict[str, LaunchConfiguration]:
         """Convert a list of keys to a dictionary mapping keys to LaunchConfiguration objects.
 
         Args:
