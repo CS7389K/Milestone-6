@@ -105,7 +105,8 @@ class LlamaPublisher(Node):
                 temperature=self.temperature,
                 top_p=self.top_p,
                 stream=True,
-                stop=["\n", "\n\n", "User:", "[/INST]", "</s>", "[INST]", "1.", "2.", "-", "  "]
+                stop=["\n\n", "User:", "[/INST]", "</s>",
+                      "[INST]", "\n1.", "\n2.", "\n-"]
             )
 
             # Log the full response for debugging
