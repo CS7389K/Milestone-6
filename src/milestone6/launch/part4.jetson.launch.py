@@ -74,6 +74,13 @@ def generate_launch_description():
     # Generate launch arguments
     launch_args = LaunchArg.generate_launch_arguments(LAUNCH_ARGS)
 
+    cli_node = Node(
+        package='milestone6',
+        executable='cli',
+        name='cli',
+        output='screen'
+    )
+
     # LLaMA Publisher Node
     llama_publisher_node = Node(
         package='milestone6',
@@ -109,6 +116,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         *launch_args,
+        cli_node,
         llama_publisher_node,
         espeak_subscriber_node,
     ])

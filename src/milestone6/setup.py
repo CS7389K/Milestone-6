@@ -46,6 +46,7 @@ setup(
             f"espeak = {package_name}.nlp.espeak:main",
             f"whisper = {package_name}.nlp.whisper:main",
             f"llama = {package_name}.nlp.llama:main",
+            f"cli = {package_name}.nlp.cli:main",
             f"part1 = {package_name}.part1:main",
             f"part2 = {package_name}.part2:main",
             f"part3 = {package_name}.part3:main",
