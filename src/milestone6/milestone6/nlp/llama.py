@@ -105,7 +105,7 @@ class LlamaPublisher(Node):
                 temperature=self.temperature,
                 top_p=self.top_p,
                 stream=True,
-                stop=["\n\n", "User:", "Assistant:"]
+                stop=["\n\n", "User:", "[/INST]", "</s>", "[INST]"]
             )
 
             # Log the full response for debugging
@@ -137,12 +137,12 @@ class LlamaPublisher(Node):
 
         if instruct:
             # Llama-2-instruct format: [INST] <<SYS>>\n{system}\n<</SYS>>\n\n{user} [/INST]
-            prompt = f"[INST] <<SYS>>\n{SYSTEM_PROMPT}\n<</SYS>>\n\n{user_text}\nAction: [/INST]"
+            prompt = f"[INST] <<SYS>>\n{SYSTEM_PROMPT}\n<</SYS>>\n\n{user_text} [/INST]"
         else:
             # Chat format
             prompt = SYSTEM_PROMPT + "\n\n"
             prompt += f"User: {user_text}\n"
-            prompt += "Action: "
+            prompt += "Assistant: "
 
         return prompt
 
