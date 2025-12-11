@@ -48,12 +48,12 @@ LAUNCH_ARGS = {
     'camera_backend': ('gstreamer', 'Camera backend (gstreamer, opencv)'),
     'camera_device': ('1', 'Camera device ID'),
     'gstreamer_pipeline': ('', 'Custom GStreamer pipeline'),
-    'tracking_classes': ('39', 'Comma-separated COCO class IDs to track (39=bottle)'),
     'speed': ('0.05', 'Linear movement speed in m/s'),
+    'turn_speed': ('0.25', 'Angular velocity in rad/s'),
+    'tracking_classes': ('39', 'Comma-separated COCO class IDs to track (39=bottle)'),
     'bbox_tolerance': ('20', 'Bounding box width tolerance in pixels'),
     'center_tolerance': ('30', 'Centering tolerance in pixels'),
     'target_bbox_width': ('365', 'Target bounding box width for approach in pixels'),
-    'turn_speed': ('0.25', 'Angular velocity in rad/s'),
     'detection_timeout': ('1.0', 'Stop if no detection for this many seconds'),
 }
 

@@ -48,7 +48,7 @@ class Robot(Node, ABC):
         'image_width': 1280,            # pixels
         'image_height': 720,            # pixels
         'speed': 0.05,                  # m/s
-        'turn_speed': 0.25,              # rad/s
+        'turn_speed': 0.25,             # rad/s
         'tracking_classes': '39',       # Comma-separated COCO class IDs
         'bbox_tolerance': 20,           # pixels
         'center_tolerance': 30,         # pixels

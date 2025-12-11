@@ -50,49 +50,29 @@ Optional Parameters:
     top_p:=<float>              Top-p sampling (default: 0.95)
     max_tokens:=<int>           Max output tokens (default: 128)
     speech_rate:=<int>          Espeak speech rate in WPM (default: 140)
-
-Examples:
-    # Use different temperature for more creative responses
-    ros2 launch milestone6 part4.jetson.launch.py temperature:=0.3
-    
-    # Use more GPU layers for faster inference
-    ros2 launch milestone6 part4.jetson.launch.py n_gpu_layers:=50
-    
-    # Adjust speech rate
-    ros2 launch milestone6 part4.jetson.launch.py speech_rate:=160
 """
 
-from launch_ros.actions import Node
-
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
 from launch import LaunchDescription
+from launch_ros.actions import Node
+from milestone6.util.launch import LaunchArg
+
+LAUNCH_ARGS = {
+    'model_path': ('', 'Path to LLaMA model (empty=use default from LlamaBackend)'),
+    'instruct': ('true', 'Use instruct model variant'),
+    'n_ctx': ('512', 'Context window size'),
+    'n_threads': ('4', 'Number of CPU threads'),
+    'n_gpu_layers': ('33', 'Number of GPU layers to offload'),
+    'temperature': ('0.7', 'Sampling temperature (lower=more deterministic)'),
+    'top_p': ('0.95', 'Top-p sampling parameter'),
+    'max_tokens': ('128', 'Maximum tokens in response'),
+    'speech_rate': ('140', 'Espeak speech rate in words per minute'),
+}
 
 
 def generate_launch_description():
     """Generate launch description for Part 4 Remote PC (LLaMA + Espeak)."""
-
-    # Declare launch arguments
-    launch_args = [
-        DeclareLaunchArgument('model_path', default_value='',
-                              description='Path to LLaMA model (empty=use default from LlamaBackend)'),
-        DeclareLaunchArgument('instruct', default_value='true',
-                              description='Use instruct model variant'),
-        DeclareLaunchArgument('n_ctx', default_value='512',
-                              description='Context window size'),
-        DeclareLaunchArgument('n_threads', default_value='4',
-                              description='Number of CPU threads'),
-        DeclareLaunchArgument('n_gpu_layers', default_value='33',
-                              description='Number of GPU layers to offload'),
-        DeclareLaunchArgument('temperature', default_value='0.7',
-                              description='Sampling temperature (lower=more deterministic)'),
-        DeclareLaunchArgument('top_p', default_value='0.95',
-                              description='Top-p sampling parameter'),
-        DeclareLaunchArgument('max_tokens', default_value='128',
-                              description='Maximum tokens in response'),
-        DeclareLaunchArgument('speech_rate', default_value='140',
-                              description='Espeak speech rate in words per minute'),
-    ]
+    # Generate launch arguments
+    launch_args = LaunchArg.generate_launch_arguments(LAUNCH_ARGS)
 
     # LLaMA Publisher Node
     llama_publisher_node = Node(
@@ -100,16 +80,18 @@ def generate_launch_description():
         executable='llama',
         name='llama',
         output='screen',
-        parameters=[{
-            'model_path': LaunchConfiguration('model_path'),
-            'instruct': LaunchConfiguration('instruct'),
-            'n_ctx': LaunchConfiguration('n_ctx'),
-            'n_threads': LaunchConfiguration('n_threads'),
-            'n_gpu_layers': LaunchConfiguration('n_gpu_layers'),
-            'temperature': LaunchConfiguration('temperature'),
-            'top_p': LaunchConfiguration('top_p'),
-            'max_tokens': LaunchConfiguration('max_tokens'),
-        }]
+        parameters=[
+            LaunchArg.generate_launch_configs([
+                'model_path',
+                'instruct',
+                'n_ctx',
+                'n_threads',
+                'n_gpu_layers',
+                'temperature',
+                'top_p',
+                'max_tokens',
+            ])
+        ]
     )
 
     # Espeak Subscriber Node
@@ -118,15 +100,15 @@ def generate_launch_description():
         executable='espeak',
         name='espeak',
         output='screen',
-        parameters=[{
-            'speech_rate': LaunchConfiguration('speech_rate'),
-        }]
+        parameters=[
+            LaunchArg.generate_launch_configs([
+                'speech_rate',
+            ])
+        ]
     )
 
     return LaunchDescription([
-        # Launch arguments
         *launch_args,
-        # Nodes
         llama_publisher_node,
         espeak_subscriber_node,
     ])

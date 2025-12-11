@@ -59,25 +59,11 @@ class Part4(Part2):
 
     # Override and extend Part2 parameters
     PARAMETERS = {
-        # LLM action execution parameters
+        'tracking_classes': '39,73,64', # bottle, bear, mouse
         'turn_duration': 1.0,           # seconds
         'forward_duration': 0.5,        # seconds
         'scan_speed': 0.5,              # rad/s
         'forward_speed_llm': 0.2,       # m/s
-        # Visual servoing parameters (override Part2)
-        'tracking_classes': '39,73,64',  # bottle, bear, mouse
-        'target_bbox_width': 365,       # pixels (adjusted for Part 4)
-        'forward_speed': 0.05,          # m/s (override Part2)
-        'turn_speed': 0.25,             # rad/s (override Part2)
-        'detection_timeout': 1.0,       # seconds (override Part2)
-        'transport_distance': 0.10,     # meters (override Part2)
-        # Arm parameters (override Part2)
-        'grab_joint2': 0.95,
-        'grab_joint3': -0.65,
-        'lower_joint2': 0.6,
-        'lower_joint3': -0.4,
-        'lower_joint4': 0.6,
-        'gripper_close': -0.015,
     }
 
     def __init__(self):

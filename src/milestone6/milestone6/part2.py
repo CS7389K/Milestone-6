@@ -53,29 +53,23 @@ class Part2(Robot):
     """
 
     PARAMETERS = {
-        'detection_timeout': 1.0,       # seconds (override Part1's 0.5s)
         'transport_distance': 1.0,      # meters
-        # Arm joint position parameters (radians)
         'grab_joint2': 0.5,             # Forward reach
         'grab_joint3': -0.3,            # Extend elbow
         'grab_joint4': 0.0,             # Level gripper
         'grab_vertical_adjust': 0.2,    # Extra reach for low objects
         'grasp_extension': 0.2,         # Extra extension to grasp
-        # Lift positions
         'lift_joint2': -0.5,            # Lift up
         'lift_joint3': 0.4,             # Retract
         'lift_joint4': 0.6,             # Adjust wrist
-        # Lower positions
         'lower_joint1': 0.0,            # Center position
         'lower_joint2': 0.3,            # Lower down
         'lower_joint3': -0.2,           # Extend
         'lower_joint4': 0.0,            # Level
-        # Home positions
         'home_joint1': 0.0,
         'home_joint2': -1.05,
         'home_joint3': 0.35,
         'home_joint4': 0.70,
-        # Gripper position parameters
         'gripper_open': 0.025,          # Open position
         'gripper_close': -0.025,        # Close position
     }
