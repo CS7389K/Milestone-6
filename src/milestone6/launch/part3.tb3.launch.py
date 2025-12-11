@@ -116,7 +116,19 @@ def generate_launch_description():
         description='Amplitude threshold for voice activity detection'
     )
 
+    prompt_delay_arg = DeclareLaunchArgument(
+        'prompt_delay',
+        default_value='30.0',
+        description='Time between voice prompts in seconds'
+    )
+
     # Visual servoing parameters
+    bbox_tolerance_arg = DeclareLaunchArgument(
+        'bbox_tolerance',
+        default_value='20',
+        description='Bounding box width tolerance in pixels'
+    )
+
     center_tolerance_arg = DeclareLaunchArgument(
         'center_tolerance',
         default_value='30',
@@ -137,7 +149,7 @@ def generate_launch_description():
 
     turn_speed_arg = DeclareLaunchArgument(
         'turn_speed',
-        default_value='0.25',
+        default_value='0.2',
         description='Angular velocity in rad/s for visual servoing'
     )
 
@@ -188,7 +200,7 @@ def generate_launch_description():
             'scan_speed': LaunchConfiguration('scan_speed'),
             'forward_speed_voice': LaunchConfiguration('forward_speed_voice'),
             'audio_file': LaunchConfiguration('audio_file'),
-            'prompt_delay': 30.0,
+            'prompt_delay': LaunchConfiguration('prompt_delay'),
             'audio_duration': LaunchConfiguration('audio_duration'),
             'audio_sample_rate': LaunchConfiguration('audio_sample_rate'),
             'audio_threshold': LaunchConfiguration('audio_threshold'),
@@ -196,7 +208,7 @@ def generate_launch_description():
             'tracking_classes': LaunchConfiguration('tracking_classes'),
             'image_width': LaunchConfiguration('image_width'),
             'image_height': LaunchConfiguration('image_height'),
-            'bbox_tolerance': 20,
+            'bbox_tolerance': LaunchConfiguration('bbox_tolerance'),
             'center_tolerance': LaunchConfiguration('center_tolerance'),
             'target_bbox_width': LaunchConfiguration('target_bbox_width'),
             'forward_speed': LaunchConfiguration('forward_speed'),
@@ -241,6 +253,8 @@ def generate_launch_description():
         audio_duration_arg,
         audio_sample_rate_arg,
         audio_threshold_arg,
+        prompt_delay_arg,
+        bbox_tolerance_arg,
         center_tolerance_arg,
         target_bbox_width_arg,
         forward_speed_arg,

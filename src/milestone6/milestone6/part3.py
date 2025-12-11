@@ -22,20 +22,10 @@ import math
 from enum import Enum
 
 import rclpy
-from builtin_interfaces.msg import Duration
-from control_msgs.action import FollowJointTrajectory, GripperCommand
-from rclpy.action import ActionClient
-from rclpy.node import Node
 from std_msgs.msg import String
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
-# Base and Arm control
-from milestone6.teleop.publisher import TeleopPublisher
-from milestone6.teleop.subscriber import TeleopSubscriber
+from milestone6.part2 import Part2
 from milestone6.util.coco import COCO_CLASSES
-
-# YOLO detection
-from milestone6.yolo.subscriber import YOLOSubscriber
 from milestone6.yolo.yolo_data import YOLOData
 
 
@@ -51,118 +41,39 @@ class State(Enum):
     DONE = 7           # Complete
 
 
-class Part3(Node):
+class Part3(Part2):
     """
     Voice-guided search with Part 2 visual servoing integration.
+    Inherits all grab/transport/release functionality from Part2.
     """
 
-    def __init__(self):
-        super().__init__('part3')
-
-        # ------------------- Parameters -------------------
+    PARAMETERS = {
         # Voice search parameters
-        self.declare_parameter('turn_duration', 1.0)        # seconds
-        self.declare_parameter('forward_duration', 0.5)     # seconds
-        self.declare_parameter('scan_speed', 0.5)           # rad/s
-        # rad/s for voice cmds
-        self.declare_parameter('forward_speed_voice', 0.2)  # m/s
-        self.declare_parameter('audio_file', '/tmp/voice_input.wav')
-        # seconds between prompts
-        self.declare_parameter('prompt_delay', 30.0)
-        # Audio recording parameters
-        self.declare_parameter('audio_duration', 5)        # seconds
-        self.declare_parameter('audio_sample_rate', 16000)  # Hz
-        # Amplitude threshold for voice detection
-        self.declare_parameter('audio_threshold', 500)
-        # Whisper subscriber usage (true for distributed, false for local)
-        self.declare_parameter('use_whisper', True)
+        'turn_duration': 1.0,           # seconds
+        'forward_duration': 0.5,        # seconds
+        'scan_speed': 0.5,              # rad/s
+        'forward_speed_voice': 0.2,     # m/s for voice commands
+        'audio_file': '/tmp/voice_input.wav',
+        'prompt_delay': 30.0,           # seconds between prompts
+        'audio_duration': 5,            # seconds
+        'audio_sample_rate': 16000,     # Hz
+        'audio_threshold': 500,         # Amplitude threshold
+        'use_whisper': True,            # Use Whisper subscriber
+    }
 
-        # Part 2 parameters (visual servoing)
-        self.declare_parameter('tracking_classes', '39')
-        self.declare_parameter('image_width', 1280)
-        self.declare_parameter('image_height', 720)
-        self.declare_parameter('bbox_tolerance', 20)
-        self.declare_parameter('center_tolerance', 30)
-        self.declare_parameter('target_bbox_width', 180)
-        self.declare_parameter('forward_speed', 0.15)
-        self.declare_parameter('turn_speed', 1.0)
-        self.declare_parameter('detection_timeout', 1)
-        self.declare_parameter('transport_distance', 1.0)
+    def __init__(self):
+        # Initialize Part2 (which initializes Robot base class)
+        super().__init__()
 
-        # Arm parameters
-        self.declare_parameter('grab_joint2', 0.5)
-        self.declare_parameter('grab_joint3', -0.3)
-        self.declare_parameter('grab_joint4', 0.0)
-        self.declare_parameter('grab_vertical_adjust', 0.2)
-        self.declare_parameter('grasp_extension', 0.2)
-        self.declare_parameter('lift_joint2', -0.5)
-        self.declare_parameter('lift_joint3', 0.4)
-        self.declare_parameter('lift_joint4', 0.6)
-        self.declare_parameter('lower_joint1', 0.0)
-        self.declare_parameter('lower_joint2', 0.3)
-        self.declare_parameter('lower_joint3', -0.2)
-        self.declare_parameter('lower_joint4', 0.0)
-        self.declare_parameter('home_joint1', 0.0)
-        self.declare_parameter('home_joint2', -1.05)
-        self.declare_parameter('home_joint3', 0.35)
-        self.declare_parameter('home_joint4', 0.70)
-        self.declare_parameter('gripper_open', 0.025)
-        self.declare_parameter('gripper_close', -0.025)
+        # Change node name from 'part2' to 'part3'
+        self._node_name = 'part3'
 
-        # Get parameters
-        self.turn_duration = self.get_parameter('turn_duration').value
-        self.forward_duration = self.get_parameter('forward_duration').value
-        self.scan_speed = self.get_parameter('scan_speed').value
-        self.forward_speed_voice = self.get_parameter(
-            'forward_speed_voice').value
-        self.audio_file = self.get_parameter('audio_file').value
-        self.prompt_delay = self.get_parameter('prompt_delay').value
-        self.audio_duration = self.get_parameter('audio_duration').value
-        self.audio_sample_rate = self.get_parameter('audio_sample_rate').value
-        self.audio_threshold = self.get_parameter('audio_threshold').value
-        self.use_whisper = self.get_parameter('use_whisper').value
-
-        tracking_classes = self.get_parameter('tracking_classes').value
-        self.image_width = self.get_parameter('image_width').value
-        self.image_height = self.get_parameter('image_height').value
-        self.bbox_tolerance = self.get_parameter('bbox_tolerance').value
-        self.center_tolerance = self.get_parameter('center_tolerance').value
-        self.target_bbox_width = self.get_parameter('target_bbox_width').value
-        self.forward_speed = self.get_parameter('forward_speed').value
-        self.turn_speed = self.get_parameter('turn_speed').value
-        self.detection_timeout = self.get_parameter('detection_timeout').value
-        self.transport_distance = self.get_parameter(
-            'transport_distance').value
-
-        self.grab_joint2 = self.get_parameter('grab_joint2').value
-        self.grab_joint3 = self.get_parameter('grab_joint3').value
-        self.grab_joint4 = self.get_parameter('grab_joint4').value
-        self.grab_vertical_adjust = self.get_parameter(
-            'grab_vertical_adjust').value
-        self.grasp_extension = self.get_parameter('grasp_extension').value
-        self.lift_joint2 = self.get_parameter('lift_joint2').value
-        self.lift_joint3 = self.get_parameter('lift_joint3').value
-        self.lift_joint4 = self.get_parameter('lift_joint4').value
-        self.lower_joint1 = self.get_parameter('lower_joint1').value
-        self.lower_joint2 = self.get_parameter('lower_joint2').value
-        self.lower_joint3 = self.get_parameter('lower_joint3').value
-        self.lower_joint4 = self.get_parameter('lower_joint4').value
-        self.home_joint1 = self.get_parameter('home_joint1').value
-        self.home_joint2 = self.get_parameter('home_joint2').value
-        self.home_joint3 = self.get_parameter('home_joint3').value
-        self.home_joint4 = self.get_parameter('home_joint4').value
-        self.gripper_open = self.get_parameter('gripper_open').value
-        self.gripper_close = self.get_parameter('gripper_close').value
-
-        # Parse tracking classes
-        if isinstance(tracking_classes, str):
-            self.tracking_classes = [
-                int(c.strip()) for c in tracking_classes.split(',') if c.strip()]
-        else:
-            self.tracking_classes = [int(tracking_classes)]
+        self.info(
+            "Initializing Part 3: Voice-Guided Object Search and Retrieval...")
+        self.info(f"Parameters: {self.parameters}")
 
         # ------------------- Text-to-Speech Publisher -------------------
-        self.get_logger().info("Creating text-to-speech publisher...")
+        self.info("Creating text-to-speech publisher...")
         self.tts_publisher = self.create_publisher(
             String,
             '/text_to_speech',
@@ -171,7 +82,7 @@ class Part3(Node):
 
         # Subscribe to audio commands from Whisper publisher
         if self.use_whisper:
-            self.get_logger().info("Subscribing to /voice_transcription topic...")
+            self.info("Subscribing to /voice_transcription topic...")
             self.audio_command_sub = self.create_subscription(
                 String,
                 '/voice_transcription',
@@ -180,93 +91,50 @@ class Part3(Node):
             )
             self.last_audio_command = None
         else:
-            self.get_logger().warn("Whisper disabled - voice commands will not work!")
+            self.warning("Whisper disabled - voice commands will not work!")
             self.audio_command_sub = None
 
-        # ------------------- YOLO Subscriber -------------------
-        self.get_logger().info("Starting YOLO Subscriber...")
-        self.yolo_subscriber = YOLOSubscriber(self, self._yolo_callback)
-
-        # ------------------- Teleop Control -------------------
-        self.get_logger().info("Starting Teleop Publisher...")
-        self.teleop_pub = TeleopPublisher(self)
-
-        self.get_logger().info("Starting Joint State Subscriber...")
-        self.teleop_sub = TeleopSubscriber(self)
-
-        # ------------------- Action Clients -------------------
-        self.arm_client = ActionClient(
-            self,
-            FollowJointTrajectory,
-            '/arm_controller/follow_joint_trajectory'
-        )
-        self.gripper_client = ActionClient(
-            self,
-            GripperCommand,
-            '/gripper_controller/gripper_cmd'
-        )
-
-        # ------------------- State Machine -------------------
+        # ------------------- Voice-Specific State -------------------
+        # Override Part2's initial state to start with voice search
         self.state = State.VOICE_SEARCH
-        self.last_detection_time = None
-        self.last_yolo_data = None
 
-        # Voice command execution
+        # Voice command execution tracking
         self.cmd_start_time = None
         self.cmd_duration = 0.0
         self.scanning = False
         self.scan_start_angle = None
 
-        # Part 2 state tracking
-        self.grab_step = 0
-        self.release_step = 0
-        self.step_start_time = None
-        self.transport_start_time = None
-        self.transport_duration = None
-        self.arm_action_future = None
-        self.gripper_action_future = None
-
         # Voice prompt timing
         self.last_prompt_time = None
 
-        # ------------------- Timer -------------------
-        self.timer = self.create_timer(0.1, self.tick)  # 10 Hz
-
-        class_names = [COCO_CLASSES.get(cls, f'unknown({cls})')
-                       for cls in self.tracking_classes]
-        self.get_logger().info(
-            f"Tracking COCO classes: {', '.join([f'{name} (ID: {cls})' for name, cls in zip(class_names, self.tracking_classes)])}")
-        self.get_logger().info("Part 3 Node Initialized.")
-        self.get_logger().info("Starting voice-guided search phase...")
+        self.info("Part 3 initialized and ready.")
+        self.info("Starting voice-guided search phase...")
 
         # Give initial prompt
         self._speak("Ready for Command")
 
-    # ------------------------------------------------------------------
-    # YOLO Callback
-    # ------------------------------------------------------------------
+    # ---------------------------------------------------------------------------- #
+    #                             Overridden Methods                               #
+    # ---------------------------------------------------------------------------- #
     def _yolo_callback(self, data: YOLOData):
-        """Process YOLO detections."""
-        if data.clz not in self.tracking_classes:
-            return
-
-        self.last_detection_time = self.get_clock().now()
-        self.last_yolo_data = data
+        """Override to add voice search announcements."""
+        # Call parent implementation to update detection data
+        super()._yolo_callback(data)
 
         # If in voice search and we detect bottle, announce it
         if self.state == State.VOICE_SEARCH:
             class_name = COCO_CLASSES.get(data.clz, f'unknown({data.clz})')
-            self.get_logger().info(
+            self.info(
                 f"[VOICE_SEARCH] {class_name} detected! "
                 f"BBox: ({data.bbox_x:.0f}, {data.bbox_y:.0f}, {data.bbox_w:.0f}x{data.bbox_h:.0f})"
             )
 
-    # ------------------------------------------------------------------
-    # Voice Interaction Methods
-    # ------------------------------------------------------------------
+    # ---------------------------------------------------------------------------- #
+    #                          Voice Interaction Methods                           #
+    # ---------------------------------------------------------------------------- #
     def _speak(self, text: str):
         """Publish text to be spoken."""
-        self.get_logger().info(f"[TTS] {text}")
+        self.info(f"[TTS] {text}")
         msg = String()
         msg.data = text
         self.tts_publisher.publish(msg)
@@ -274,7 +142,7 @@ class Part3(Node):
     def _audio_command_callback(self, msg: String):
         """Callback for audio commands from Whisper publisher."""
         self.last_audio_command = msg.data
-        self.get_logger().info(f"[AUDIO] Received command: '{msg.data}'")
+        self.info(f"[AUDIO] Received command: '{msg.data}'")
 
     def _parse_command(self, text: str) -> str:
         """
@@ -305,19 +173,19 @@ class Part3(Node):
         """Start executing a voice command."""
         if cmd == 'turn_right':
             self._speak("Turning right")
-            self.teleop_pub.set_velocity(
+            self.teleop_publisher.set_velocity(
                 linear_x=0.0, angular_z=-self.turn_speed)
             self.cmd_duration = self.turn_duration
 
         elif cmd == 'turn_left':
             self._speak("Turning left")
-            self.teleop_pub.set_velocity(
+            self.teleop_publisher.set_velocity(
                 linear_x=0.0, angular_z=self.turn_speed)
             self.cmd_duration = self.turn_duration
 
         elif cmd == 'forward':
             self._speak("Moving forward")
-            self.teleop_pub.set_velocity(
+            self.teleop_publisher.set_velocity(
                 linear_x=self.forward_speed_voice, angular_z=0.0)
             self.cmd_duration = self.forward_duration
 
@@ -326,202 +194,27 @@ class Part3(Node):
             self.scanning = True
             self.scan_start_angle = self.teleop_sub.joint_positions.get(
                 'joint1', 0.0)
-            self.teleop_pub.set_velocity(
+            self.teleop_publisher.set_velocity(
                 linear_x=0.0, angular_z=self.scan_speed)
             self.cmd_duration = (2 * math.pi) / self.scan_speed  # 360 degrees
 
         self.cmd_start_time = self.get_clock().now()
         self.state = State.EXECUTING_CMD
 
-    # ------------------------------------------------------------------
-    # Part 2 Helper Methods (Visual Servoing)
-    # ------------------------------------------------------------------
-    def detection_is_fresh(self):
-        """Check if we have a recent detection."""
-        if self.last_detection_time is None:
-            self.get_logger().debug("No detection time set")
-            return False
-        elapsed = (self.get_clock().now() -
-                   self.last_detection_time).nanoseconds / 1e9
-        is_fresh = elapsed < self.detection_timeout
-        self.get_logger().debug(
-            f"Detection age: {elapsed:.3f}s, fresh: {is_fresh}")
-        return is_fresh
-
-    def stop_base(self):
-        """Stop base movement."""
-        self.teleop_pub.set_velocity(linear_x=0.0, angular_z=0.0)
-
-    def is_centered(self, yolo_data: YOLOData):
-        """Check if object is centered in frame."""
-        obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
-        image_center_x = self.image_width / 2.0
-        offset_x = abs(obj_center_x - image_center_x)
-        return offset_x <= self.center_tolerance
-
-    def is_at_grab_distance(self, yolo_data: YOLOData):
-        """Check if object is at ideal grabbing distance."""
-        bbox_error = abs(yolo_data.bbox_w - self.target_bbox_width)
-        return bbox_error <= self.bbox_tolerance
-
-    def center_on_object(self, yolo_data: YOLOData):
-        """
-        Calculate and apply turning velocity to center object.
-        Returns True if centered, False otherwise.
-        """
-        obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
-        image_center_x = self.image_width / 2.0
-        offset_x = obj_center_x - image_center_x
-
-        if abs(offset_x) <= self.center_tolerance:
-            self.stop_base()
-            return True
-
-        # Calculate turning velocity (negative offset = object left = turn left)
-        angular_ratio = -offset_x / (self.image_width / 2.0)
-        angular_ratio = max(-1.0, min(1.0, angular_ratio))  # Clamp to [-1, 1]
-        angular_vel = angular_ratio * self.turn_speed
-
-        self.teleop_pub.set_velocity(linear_x=0.0, angular_z=angular_vel)
-        self.get_logger().debug(
-            f"Centering: offset={offset_x:.1f}px, angular={angular_vel:.2f} rad/s")
-        return False
-
-    def approach_object(self, yolo_data: YOLOData):
-        """
-        Move forward/backward to achieve ideal grabbing distance.
-        Returns True if at correct distance, False otherwise.
-        """
-        bbox_error = yolo_data.bbox_w - self.target_bbox_width
-
-        if abs(bbox_error) <= self.bbox_tolerance:
-            self.stop_base()
-            return True
-
-        if bbox_error < -self.bbox_tolerance:
-            # Too far, move forward
-            linear_vel = self.forward_speed
-            self.get_logger().debug(
-                f"Too far (bbox={yolo_data.bbox_w:.0f}px), moving forward")
-        else:
-            # Too close, move backward
-            linear_vel = -self.forward_speed * 0.5
-            self.get_logger().debug(
-                f"Too close (bbox={yolo_data.bbox_w:.0f}px), backing up")
-
-        self.teleop_pub.set_velocity(linear_x=linear_vel, angular_z=0.0)
-        return False
-
-    def send_arm_trajectory(self, positions: dict, time_sec: float = 2.0):
-        """
-        Send arm trajectory using FollowJointTrajectory action.
-
-        Args:
-            positions: Dict mapping joint names to target positions (radians)
-            time_sec: Time to reach target position
-
-        Returns:
-            Future for the action goal
-        """
-        if not self.arm_client.wait_for_server(timeout_sec=1.0):
-            self.get_logger().error("Arm controller not available!")
-            return None
-
-        # Create trajectory
-        joint_names = ['joint1', 'joint2', 'joint3', 'joint4']
-        trajectory = JointTrajectory()
-        trajectory.joint_names = joint_names
-
-        point = JointTrajectoryPoint()
-        point.positions = [positions.get(j, 0.0) for j in joint_names]
-        point.time_from_start = Duration(
-            sec=int(time_sec),
-            nanosec=int((time_sec % 1.0) * 1e9)
-        )
-        trajectory.points = [point]
-
-        # Send goal
-        goal = FollowJointTrajectory.Goal()
-        goal.trajectory = trajectory
-
-        future = self.arm_client.send_goal_async(goal)
-        self.get_logger().info(f"Sent arm trajectory: {positions}")
-        return future
-
-    def send_gripper_command(self, position: float):
-        """
-        Send gripper command using GripperCommand action.
-
-        Args:
-            position: Gripper position (0.025 = open, -0.015 = close)
-
-        Returns:
-            Future for the action goal
-        """
-        if not self.gripper_client.wait_for_server(timeout_sec=1.0):
-            self.get_logger().error("Gripper controller not available!")
-            return None
-
-        goal = GripperCommand.Goal()
-        goal.command.position = float(position)
-        goal.command.max_effort = -1.0
-
-        future = self.gripper_client.send_goal_async(goal)
-        action = "Opening" if position > 0 else "Closing"
-        self.get_logger().info(f"{action} gripper (pos={position})")
-        return future
-
-    def calculate_grab_position(self, yolo_data: YOLOData):
-        """
-        Calculate arm position for grabbing based on object location.
-        Uses simple visual servoing approach.
-        """
-        obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
-        obj_center_y = yolo_data.bbox_y + (yolo_data.bbox_h / 2.0)
-
-        # Normalize positions
-        norm_x = (obj_center_x - (self.image_width / 2.0)) / \
-            (self.image_width / 2.0)
-        norm_y = (obj_center_y - (self.image_height / 2.0)) / \
-            (self.image_height / 2.0)
-
-        # Joint 1: Pan (base rotation) - camera FOV ~62°
-        camera_hfov_rad = math.radians(62.0)
-        joint1 = norm_x * (camera_hfov_rad / 2.0)
-        joint1 = max(-1.5, min(1.5, joint1))  # Safety limits
-
-        # Joints 2-4: Forward reach configuration
-        # These values position arm for grabbing at optimal distance
-        joint2 = self.grab_joint2
-        joint3 = self.grab_joint3
-        joint4 = self.grab_joint4
-
-        # Adjust reach based on vertical position
-        if norm_y > 0.2:  # Object low in frame
-            joint2 += self.grab_vertical_adjust  # Reach down more
-
-        return {
-            'joint1': joint1,
-            'joint2': joint2,
-            'joint3': joint3,
-            'joint4': joint4
-        }
-
-    # ------------------------------------------------------------------
-    # State Machine
-    # ------------------------------------------------------------------
-
-    def tick(self):
-        """Main state machine tick (10 Hz)."""
+    # ---------------------------------------------------------------------------- #
+    #                         Main Control Loop Override                           #
+    # ---------------------------------------------------------------------------- #
+    def _tick(self):
+        """Override Part2's tick to handle voice search states."""
 
         # ==================== VOICE_SEARCH ====================
         if self.state == State.VOICE_SEARCH:
             # Check if bottle is detected
             if self.detection_is_fresh() and self.last_yolo_data is not None:
-                self.get_logger().info("\n" + "=" * 70)
-                self.get_logger().info(
+                self.info("\n" + "=" * 70)
+                self.info(
                     "[VOICE_SEARCH] Bottle found! Switching to visual servoing...")
-                self.get_logger().info("=" * 70)
+                self.info("=" * 70)
                 self._speak("Bottle detected. Locking on.")
                 self.state = State.CENTERING
                 return
@@ -554,33 +247,33 @@ class Part3(Node):
                        self.cmd_start_time).nanoseconds / 1e9
 
             if elapsed >= self.cmd_duration:
-                self.stop_base()
+                self.stop_movement()
                 self.scanning = False
-                self.get_logger().info("[EXECUTING_CMD] Command complete")
+                self.info("[EXECUTING_CMD] Command complete")
                 self.state = State.VOICE_SEARCH
                 self.last_prompt_time = self.get_clock().now()  # Reset prompt timer
 
         # ==================== CENTERING (Part 2) ====================
         elif self.state == State.CENTERING:
             if not self.detection_is_fresh():
-                self.get_logger().warn(
+                self.warning(
                     "[CENTERING] Lost detection, returning to voice search")
-                self.stop_base()
+                self.stop_movement()
                 self._speak("Lost sight of bottle. Ready for Command.")
                 self.state = State.VOICE_SEARCH
                 return
 
             if self.center_on_object(self.last_yolo_data):
-                self.get_logger().info(
+                self.info(
                     "[CENTERING] Centered! Moving to APPROACHING...")
                 self.state = State.APPROACHING
 
         # ==================== APPROACHING (Part 2) ====================
         elif self.state == State.APPROACHING:
             if not self.detection_is_fresh():
-                self.get_logger().warn(
+                self.warning(
                     "[APPROACHING] Lost detection, returning to voice search")
-                self.stop_base()
+                self.stop_movement()
                 self._speak("Lost sight of bottle. Ready for Command.")
                 self.state = State.VOICE_SEARCH
                 return
@@ -590,49 +283,49 @@ class Part3(Node):
                 return
 
             if self.approach_object(self.last_yolo_data):
-                self.get_logger().info(
+                self.info(
                     "[APPROACHING] At grab distance! Starting GRABBING...")
-                self.stop_base()
+                self.stop_movement()
                 self._speak("Grabbing bottle")
                 self.grab_step = 0
                 self.state = State.GRABBING
 
         # ==================== GRABBING (Part 2) ====================
         elif self.state == State.GRABBING:
-            self._execute_grab_sequence()
+            self.execute_grab_sequence()
 
         # ==================== TRANSPORTING (Part 2) ====================
         elif self.state == State.TRANSPORTING:
             if self.transport_start_time is None:
-                self.transport_duration = self.transport_distance / self.forward_speed
+                self.transport_duration = self.transport_distance / self.speed
                 self.transport_start_time = self.get_clock().now()
 
-                self.get_logger().info(
+                self.info(
                     f"[TRANSPORTING] Moving forward {self.transport_distance}m")
                 self._speak("Transporting bottle")
-                self.teleop_pub.set_velocity(
-                    linear_x=self.forward_speed, angular_z=0.0)
+                self.teleop_publisher.set_velocity(
+                    linear_x=self.speed, angular_z=0.0)
             else:
                 elapsed = (self.get_clock().now() -
                            self.transport_start_time).nanoseconds / 1e9
 
                 if elapsed >= self.transport_duration:
-                    self.stop_base()
-                    self.get_logger().info(
+                    self.stop_movement()
+                    self.info(
                         "[TRANSPORTING] Complete! Starting RELEASING...")
                     self.release_step = 0
                     self.state = State.RELEASING
 
         # ==================== RELEASING (Part 2) ====================
         elif self.state == State.RELEASING:
-            self._execute_release_sequence()
+            self.execute_release_sequence()
 
         # ==================== DONE ====================
         elif self.state == State.DONE:
-            self.get_logger().info("\n" + "=" * 70)
-            self.get_logger().info("MISSION COMPLETE!")
-            self.get_logger().info("Bottle successfully retrieved and transported!")
-            self.get_logger().info("=" * 70 + "\n")
+            self.info("\n" + "=" * 70)
+            self.info("MISSION COMPLETE!")
+            self.info("Bottle successfully retrieved and transported!")
+            self.info("=" * 70 + "\n")
 
             self._speak("Mission complete")
             self._speak("Ready for Command")
@@ -644,153 +337,13 @@ class Part3(Node):
             self.state = State.VOICE_SEARCH
             self.last_prompt_time = self.get_clock().now()
 
-    # ------------------------------------------------------------------
-    # Part 2 Sequences
-    # ------------------------------------------------------------------
-    def _execute_grab_sequence(self):
-        """Multi-step grabbing sequence using FollowJointTrajectory."""
-
-        # Step 0: Open gripper
-        if self.grab_step == 0:
-            self.get_logger().info("[GRAB] Step 0: Opening gripper...")
-            self.gripper_action_future = self.send_gripper_command(
-                self.gripper_open)
-            self.step_start_time = self.get_clock().now()
-            self.grab_step = 1
-
-        # Step 1: Wait for gripper to open
-        elif self.grab_step == 1:
-            elapsed = (self.get_clock().now() -
-                       self.step_start_time).nanoseconds / 1e9
-            if elapsed >= 2.0:
-                self.get_logger().info(
-                    "[GRAB] Step 1: Moving arm to grab position...")
-                grab_pos = self.calculate_grab_position(self.last_yolo_data)
-                self.arm_action_future = self.send_arm_trajectory(
-                    grab_pos, time_sec=2.5)
-                self.step_start_time = self.get_clock().now()
-                self.grab_step = 2
-
-        # Step 2: Wait for arm to position
-        elif self.grab_step == 2:
-            elapsed = (self.get_clock().now() -
-                       self.step_start_time).nanoseconds / 1e9
-            if elapsed >= 3.0:  # Give extra time for trajectory
-                self.get_logger().info("[GRAB] Step 2: Extending to grasp...")
-                # Extend slightly more to grasp
-                current = self.teleop_sub.joint_positions
-                grasp_pos = {
-                    'joint1': current.get('joint1', 0.0),
-                    'joint2': current.get('joint2', self.grab_joint2),
-                    'joint3': min(1.5, current.get('joint3', self.grab_joint3) + self.grasp_extension),
-                    'joint4': current.get('joint4', self.grab_joint4)
-                }
-                self.arm_action_future = self.send_arm_trajectory(
-                    grasp_pos, time_sec=1.5)
-                self.step_start_time = self.get_clock().now()
-                self.grab_step = 3
-
-        # Step 3: Wait for extension, then close gripper
-        elif self.grab_step == 3:
-            elapsed = (self.get_clock().now() -
-                       self.step_start_time).nanoseconds / 1e9
-            if elapsed >= 2.0:
-                self.get_logger().info("[GRAB] Step 3: Closing gripper...")
-                self.gripper_action_future = self.send_gripper_command(
-                    self.gripper_close)
-                self.step_start_time = self.get_clock().now()
-                self.grab_step = 4
-
-        # Step 4: Wait for gripper, then lift
-        elif self.grab_step == 4:
-            elapsed = (self.get_clock().now() -
-                       self.step_start_time).nanoseconds / 1e9
-            if elapsed >= 2.0:
-                self.get_logger().info("[GRAB] Step 4: Lifting object...")
-                lift_pos = {
-                    'joint1': self.teleop_sub.joint_positions.get('joint1', 0.0),
-                    'joint2': self.lift_joint2,
-                    'joint3': self.lift_joint3,
-                    'joint4': self.lift_joint4
-                }
-                self.arm_action_future = self.send_arm_trajectory(
-                    lift_pos, time_sec=2.0)
-                self.step_start_time = self.get_clock().now()
-                self.grab_step = 5
-
-        # Step 5: Wait for lift to complete
-        elif self.grab_step == 5:
-            elapsed = (self.get_clock().now() -
-                       self.step_start_time).nanoseconds / 1e9
-            if elapsed >= 2.5:
-                self.get_logger().info(
-                    "[GRAB] Object grabbed! Moving to TRANSPORTING...")
-                self.grab_step = 0
-                self.state = State.TRANSPORTING
-
-    def _execute_release_sequence(self):
-        """Multi-step release sequence."""
-
-        # Step 0: Lower arm
-        if self.release_step == 0:
-            self.get_logger().info(
-                "[RELEASE] Step 0: Lowering arm to place object...")
-            lower_pos = {
-                'joint1': self.lower_joint1,
-                'joint2': self.lower_joint2,
-                'joint3': self.lower_joint3,
-                'joint4': self.lower_joint4
-            }
-            self.arm_action_future = self.send_arm_trajectory(
-                lower_pos, time_sec=2.0)
-            self.step_start_time = self.get_clock().now()
-            self.release_step = 1
-
-        # Step 1: Wait for lowering, then open gripper
-        elif self.release_step == 1:
-            elapsed = (self.get_clock().now() -
-                       self.step_start_time).nanoseconds / 1e9
-            if elapsed >= 2.5:
-                self.get_logger().info(
-                    "[RELEASE] Step 1: Opening gripper to release...")
-                self.gripper_action_future = self.send_gripper_command(
-                    self.gripper_open)
-                self.step_start_time = self.get_clock().now()
-                self.release_step = 2
-
-        # Step 2: Wait for gripper, then retract arm
-        elif self.release_step == 2:
-            elapsed = (self.get_clock().now() -
-                       self.step_start_time).nanoseconds / 1e9
-            if elapsed >= 2.0:
-                self.get_logger().info(
-                    "[RELEASE] Step 2: Retracting arm to home position...")
-                home_pos = {
-                    'joint1': self.home_joint1,
-                    'joint2': self.home_joint2,
-                    'joint3': self.home_joint3,
-                    'joint4': self.home_joint4
-                }
-                self.arm_action_future = self.send_arm_trajectory(
-                    home_pos, time_sec=2.0)
-                self.step_start_time = self.get_clock().now()
-                self.release_step = 3
-
-        # Step 3: Wait for retraction to complete
-        elif self.release_step == 3:
-            elapsed = (self.get_clock().now() -
-                       self.step_start_time).nanoseconds / 1e9
-            if elapsed >= 2.5:
-                self.get_logger().info("[RELEASE] Release complete!")
-                self.release_step = 0
-                self.state = State.DONE
-
+    # ---------------------------------------------------------------------------- #
+    #                             Shutdown Override                                #
+    # ---------------------------------------------------------------------------- #
     def shutdown(self):
         """Clean shutdown."""
-        self.get_logger().info("Shutting down Part 2...")
-        self.stop_base()
-        self.timer.cancel()
-        self.teleop_pub.shutdown()
+        self.info("Shutting down Part 3...")
+        super().shutdown()
 
 
 def main(args=None):

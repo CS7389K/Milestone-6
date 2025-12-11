@@ -120,19 +120,19 @@ def generate_launch_description():
 
     speed_arg = DeclareLaunchArgument(
         'speed',
-        default_value='0.15',
+        default_value='0.05',
         description='Linear velocity in m/s'
     )
 
     turn_speed_arg = DeclareLaunchArgument(
         'turn_speed',
-        default_value='1.0',
+        default_value='0.25',
         description='Angular velocity in rad/s'
     )
 
     transport_distance_arg = DeclareLaunchArgument(
         'transport_distance',
-        default_value='1.0',
+        default_value='0.10',
         description='Distance to transport object in meters'
     )
 

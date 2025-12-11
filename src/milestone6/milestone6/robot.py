@@ -71,6 +71,7 @@ class Robot(Node, ABC):
         for base_class in classes_with_params:
             self.info(f"Merging parameters from {base_class.__name__}: {base_class.PARAMETERS}")
             merged.update(base_class.PARAMETERS)
+            self.info(f"Merged parameters so far: {merged}")
         return merged
 
     def __init__(self, node_name: str):
