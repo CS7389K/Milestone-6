@@ -241,7 +241,10 @@ class Part4(Part2):
             if target:
                 self.placement_target = target
                 self.held_object = 'bottle'  # Assume we picked up bottle
+                # Update tracking to search for placement target
+                self.tracking_classes = [self._get_class_id_for_object(target)]
                 self._speak(f"Transporting to {target}")
+                self.info(f"Now tracking {target} (class {self.tracking_classes[0]}) for placement")
                 self.state = State.TRANSPORTING
             self._finish_action()
 
@@ -314,14 +317,27 @@ class Part4(Part2):
             if self.detection_is_fresh():
                 if self.is_centered(self.last_yolo_data):
                     self.stop_movement()
-                    self.state = State.APPROACHING
-                    self.info("Centered! Moving to approach...")
+                    # Check if we're holding an object (transporting) or approaching to grab
+                    if self.held_object and self.placement_target:
+                        # Centered on placement target while holding object
+                        # Return to TRANSPORTING state to wait for PLACE command
+                        self.info(f"Centered on {self.placement_target}! Ready to place.")
+                        self._speak(f"Centered on {self.placement_target}")
+                        self.state = State.TRANSPORTING
+                    else:
+                        # Normal centering before grab
+                        self.state = State.APPROACHING
+                        self.info("Centered! Moving to approach...")
                 else:
                     self.center_on_object(self.last_yolo_data)
             else:
                 self.stop_movement()
                 self.warning("Lost object during centering")
-                self.state = State.LLM_GUIDED
+                # Return to appropriate state
+                if self.held_object:
+                    self.state = State.TRANSPORTING
+                else:
+                    self.state = State.LLM_GUIDED
 
         elif self.state == State.APPROACHING:
             # Approach to grab distance (inherited from Part2/Robot)
@@ -343,8 +359,13 @@ class Part4(Part2):
             self.execute_grab_sequence(next_state=State.TRANSPORTING)
 
         elif self.state == State.TRANSPORTING:
-            # Continue accepting LLM actions while transporting
-            pass
+            # Check if we've detected the placement target while holding object
+            if self.held_object and self.placement_target:
+                if self.detection_is_fresh():
+                    # Target detected! Center on it while still holding object
+                    self._speak(f"Found {self.placement_target}, centering on it")
+                    self.state = State.CENTERING
+                # Otherwise continue accepting LLM actions while transporting
 
         elif self.state == State.PLACING:
             # Use Part2's execute_release_sequence with next_state parameter
