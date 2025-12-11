@@ -164,7 +164,10 @@ ros2 launch milestone6 part4.jetson.launch.py
 # On TurtleBot (Hardware + YOLO + Mission):
 ros2 launch milestone6 part4.tb3.launch.py
 
-# Send commands from another terminal:
+# Send commands using the interactive CLI (recommended):
+python3 src/milestone6/milestone6/nlp/cli.py
+
+# Or send individual commands from another terminal using topics:
 ros2 topic pub /user_command std_msgs/String "data: 'Scan for the bottle'"
 ros2 topic pub /user_command std_msgs/String "data: 'Turn left'"
 ros2 topic pub /user_command std_msgs/String "data: 'Move forward'"
