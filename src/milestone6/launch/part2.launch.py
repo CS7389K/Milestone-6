@@ -79,6 +79,7 @@ LAUNCH_ARGS = {
     'center_tolerance': ('30', 'Centering tolerance in pixels'),
     'target_bbox_width': ('365', 'Target bounding box width for approach in pixels'),
     'turn_speed': ('0.25', 'Angular velocity in rad/s'),
+    'transport_distance': ('0.10', 'Distance to transport object in meters'),
     'detection_timeout': ('1.0', 'Stop if no detection for this many seconds'),
     'grab_joint2': ('0.95', 'Grab position: forward reach (radians)'),
     'grab_joint3': ('-0.65', 'Grab position: extend elbow (radians)'),
