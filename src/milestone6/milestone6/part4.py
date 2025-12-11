@@ -89,8 +89,6 @@ class Part4(Part2):
         self.held_object = None         # Track if holding bottle
         self.placement_target = None    # Target object for placement
 
-        # Note: grab_step, release_step, and step_start_time inherited from Part2
-
         # ------------------- LLM Communication -------------------
         # LLM action subscriber
         self.llm_action_sub = self.create_subscription(
@@ -189,6 +187,7 @@ class Part4(Part2):
         # Execute action based on type
         if action == 'TURN_LEFT':
             if elapsed < self.turn_duration:
+                self._speak("Turning left")
                 self.teleop_publisher.set_velocity(0.0, self.scan_speed)
             else:
                 self.stop_movement()
@@ -196,6 +195,7 @@ class Part4(Part2):
 
         elif action == 'TURN_RIGHT':
             if elapsed < self.turn_duration:
+                self._speak("Turning right")
                 self.teleop_publisher.set_velocity(0.0, -self.scan_speed)
             else:
                 self.stop_movement()
@@ -203,12 +203,14 @@ class Part4(Part2):
 
         elif action == 'MOVE_FORWARD':
             if elapsed < self.forward_duration:
+                self._speak("Moving forward")
                 self.teleop_publisher.set_velocity(self.forward_speed_llm, 0.0)
             else:
                 self.stop_movement()
                 self._finish_action()
 
         elif action == 'SCAN':
+            self._speak("Scanning")
             self._execute_scan()
 
         elif action.startswith('SEARCH'):
@@ -228,7 +230,7 @@ class Part4(Part2):
             if self.detection_is_fresh():
                 self.grab_step = 0  # Initialize grab sequence
                 self.state = State.CENTERING
-                self._speak("Engaging visual servoing for grab")
+                self._speak("This is mine now")
                 self._finish_action()
             else:
                 self._speak("No object detected, cannot grab")

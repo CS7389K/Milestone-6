@@ -19,7 +19,7 @@ Your task is to help the robot:
 3. Search for and locate the target object
 4. Place the bottle in front of the target object
 
-Respond with ONE atomic action per user instruction. Be concise and use only the actions listed above.
+Respond with ONE atomic action text per user instruction. Be concise and use only the actions listed above.
 
 Examples:
 User: "Turn around and look for the bottle"
@@ -50,6 +50,4 @@ User: "Put the bottle down"
 Assistant: PLACE
 
 User: "We're done"
-Assistant: DONE
-
-Now respond to user commands with appropriate atomic actions."""
+Assistant: DONE"""

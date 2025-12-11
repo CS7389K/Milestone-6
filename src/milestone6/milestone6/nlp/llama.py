@@ -24,11 +24,11 @@ from std_msgs.msg import String
 from milestone6.nlp.backends.llama import LlamaBackend
 from milestone6.nlp.prompts import SYSTEM_PROMPT
 
+
 class LlamaPublisher(Node):
     """ROS2 node that uses LLaMA to translate user commands to robot actions."""
 
     # System prompt for high-level planning
-    
 
     def __init__(self):
         super().__init__('llama_publisher')
@@ -79,9 +79,6 @@ class LlamaPublisher(Node):
             10
         )
 
-        # Conversation history for context
-        self.conversation_history = []
-
         self.get_logger().info("LLaMA Publisher initialized")
         self.get_logger().info("Listening for commands on /user_command...")
         self.get_logger().info("Publishing actions to /llm_action...")
@@ -119,16 +116,6 @@ class LlamaPublisher(Node):
                 action_msg = String()
                 action_msg.data = action
                 self.action_publisher.publish(action_msg)
-
-                # Update conversation history
-                self.conversation_history.append({
-                    'user': user_text,
-                    'assistant': action
-                })
-
-                # Keep only last 5 exchanges for context
-                if len(self.conversation_history) > 5:
-                    self.conversation_history.pop(0)
             else:
                 self.get_logger().warn(
                     f"Could not extract action from: {response}")
@@ -137,17 +124,19 @@ class LlamaPublisher(Node):
             self.get_logger().error(f"Error processing command: {e}")
 
     def _build_prompt(self, user_text: str) -> str:
-        """Build prompt with system context and conversation history."""
-        prompt = SYSTEM_PROMPT + "\n\n"
+        """Build prompt with system context and user input."""
+        # For instruct models, use [INST] format
+        # For chat models, use conversational format
+        instruct = self.get_parameter('instruct').value
 
-        # Add conversation history for context
-        for exchange in self.conversation_history:
-            prompt += f"User: {exchange['user']}\n"
-            prompt += f"Assistant: {exchange['assistant']}\n\n"
-
-        # Add current user input
-        prompt += f"User: {user_text}\n"
-        prompt += "Assistant: "
+        if instruct:
+            # Llama-2-instruct format: [INST] <<SYS>>\n{system}\n<</SYS>>\n\n{user} [/INST]
+            prompt = f"[INST] <<SYS>>\n{SYSTEM_PROMPT}\n<</SYS>>\n\n{user_text} [/INST]"
+        else:
+            # Chat format
+            prompt = SYSTEM_PROMPT + "\n\n"
+            prompt += f"User: {user_text}\n"
+            prompt += "Assistant: "
 
         return prompt
 
