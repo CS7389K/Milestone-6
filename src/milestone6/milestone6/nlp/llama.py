@@ -138,7 +138,7 @@ class LlamaPublisher(Node):
 
         if instruct:
             # Llama-2-32K-Instruct format: [INST]\n{instruction}\n[/INST]\n
-            prompt = f"[INST]\n{SYSTEM_PROMPT}\n\nCommand: \"{user_text}\"\nAction:[/INST]"
+            prompt = f"[INST]\n{SYSTEM_PROMPT}\n\nCommand: \"{user_text}\"\nAction: [/INST]"
         else:
             # Chat format
             prompt = SYSTEM_PROMPT + "\n\n"

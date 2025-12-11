@@ -77,4 +77,6 @@ class LlamaBackend():
             stop=stop
         )
         response = "".join([c["choices"][0]["text"] for c in chunks])
-        return response.strip()
+        # Strip whitespace and common artifacts
+        response = response.strip().lstrip(":")
+        return response
