@@ -122,12 +122,7 @@ class Part4(Part2):
     def _llm_action_callback(self, msg: String):
         """Process atomic action from LLM."""
         action = msg.data.strip().upper()
-        self.info(f"[LLM ACTION RECEIVED] {action}")
-
-        if not action:
-            return
-
-        self.get_logger().info(f"[LLM ACTION] {action}")
+        self.info(f"[LLM ACTION] {action}")
 
         # Parse and store action
         if action == 'DONE':
