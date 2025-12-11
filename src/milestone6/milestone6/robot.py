@@ -62,10 +62,14 @@ class Robot(Node, ABC):
         Child class parameters override parent class parameters.
         """
         merged = {}
-        # Traverse in reverse MRO order (from base to derived)
-        for base_class in reversed(self.__class__.__mro__):
-            if hasattr(base_class, 'PARAMETERS') and base_class.PARAMETERS is not None:
-                merged.update(base_class.PARAMETERS)
+        # Traverse MRO order from base to derived (so derived overwrites base)
+        # Filter out object and ABC classes, then reverse to go base->derived
+        classes_with_params = [
+            cls for cls in reversed(self.__class__.__mro__)
+            if hasattr(cls, 'PARAMETERS') and cls.PARAMETERS is not None
+        ]
+        for base_class in classes_with_params:
+            merged.update(base_class.PARAMETERS)
         return merged
 
     def __init__(self, node_name: str):
