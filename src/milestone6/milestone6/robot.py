@@ -78,7 +78,7 @@ class Robot(Node, ABC):
         for param_name, default_value in params.items():
             self.declare_parameter(param_name, default_value)
             self.__setattr__(param_name, self.get_parameter(param_name).value)
-        self.debug(f"Parameters: {self.parameters}")
+        self.info(f"Parameters: {self.parameters}")
 
         # Track when we last saw the target object
         self.last_detection_time = None
@@ -108,7 +108,7 @@ class Robot(Node, ABC):
         # Create timer for main control loop
         self.control_timer = self.create_timer(0.1, self._tick)
 
-        self.info(f"Robot {node_name}'s has been started successfully.")
+        self.info("Initialized Robot.")
 
     # ---------------------------------------------------------------------------- #
     #                    Methods to be implemented by subclasses                   #
