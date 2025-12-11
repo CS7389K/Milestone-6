@@ -17,7 +17,8 @@ class LlamaBackend():
         n_threads: int = 4,
         n_gpu_layers: int = 33,
         seed=42,
-        use_mlock: bool = True,
+        use_mlock: bool = False,
+        verbose: bool = True,
     ):
 
         if len(model_path) == 0:
@@ -30,6 +31,19 @@ class LlamaBackend():
                 model_path = Path(model_path)
             # assert not model_path.exists(), f"Model path '{model_path}' is not a valid file."
 
+        # Verify file exists before loading
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+
+        # Verify file is readable and non-empty
+        if model_path.stat().st_size == 0:
+            raise ValueError(f"Model file is empty: {model_path}")
+
+        print(f"Loading model from: {model_path}")
+        print(f"File size: {model_path.stat().st_size / (1024**3):.2f} GB")
+        print(
+            f"Parameters: n_ctx={n_ctx}, n_threads={n_threads}, n_gpu_layers={n_gpu_layers}")
+
         self.llm = Llama(
             model_path=str(model_path),
             n_ctx=n_ctx,
@@ -37,6 +51,7 @@ class LlamaBackend():
             n_gpu_layers=n_gpu_layers,
             seed=seed,
             use_mlock=use_mlock,
+            verbose=verbose,
         )
 
     def __call__(
