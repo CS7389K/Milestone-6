@@ -114,7 +114,7 @@ def generate_launch_description():
 
     target_bbox_width_arg = DeclareLaunchArgument(
         'target_bbox_width',
-        default_value='180',
+        default_value='365',
         description='Ideal bounding box width for grabbing in pixels'
     )
 
@@ -144,11 +144,11 @@ def generate_launch_description():
 
     # Arm joint position arguments
     grab_joint2_arg = DeclareLaunchArgument(
-        'grab_joint2', default_value='0.5',
+        'grab_joint2', default_value='0.95',
         description='Grab position: forward reach (radians)'
     )
     grab_joint3_arg = DeclareLaunchArgument(
-        'grab_joint3', default_value='-0.3',
+        'grab_joint3', default_value='-0.65',
         description='Grab position: extend elbow (radians)'
     )
     grab_joint4_arg = DeclareLaunchArgument(
@@ -182,15 +182,15 @@ def generate_launch_description():
         description='Lower position: center (radians)'
     )
     lower_joint2_arg = DeclareLaunchArgument(
-        'lower_joint2', default_value='0.3',
+        'lower_joint2', default_value='0.6',
         description='Lower position: down (radians)'
     )
     lower_joint3_arg = DeclareLaunchArgument(
-        'lower_joint3', default_value='-0.2',
+        'lower_joint3', default_value='-0.4',
         description='Lower position: extend (radians)'
     )
     lower_joint4_arg = DeclareLaunchArgument(
-        'lower_joint4', default_value='0.0',
+        'lower_joint4', default_value='0.6',
         description='Lower position: level (radians)'
     )
 
@@ -216,7 +216,7 @@ def generate_launch_description():
         description='Gripper open position'
     )
     gripper_close_arg = DeclareLaunchArgument(
-        'gripper_close', default_value='-0.025',
+        'gripper_close', default_value='-0.015',
         description='Gripper close position'
     )
 
