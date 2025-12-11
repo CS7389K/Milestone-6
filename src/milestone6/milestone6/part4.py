@@ -283,11 +283,11 @@ class Part4(Part2):
         """Execute 360° scan."""
         if self.initial_yaw is None:
             # Initialize scan
-            self.initial_yaw = self.teleop_subscriber.yaw
+            self.initial_yaw = self.teleop_sub.yaw
             self.scan_complete = False
             self.info(f"Starting scan from yaw: {self.initial_yaw:.2f}")
 
-        current_yaw = self.teleop_subscriber.yaw
+        current_yaw = self.teleop_sub.yaw
 
         # Calculate how far we've rotated
         yaw_diff = abs(current_yaw - self.initial_yaw)
@@ -321,11 +321,11 @@ class Part4(Part2):
 
         # Initialize search if needed
         if self.search_initial_yaw is None:
-            self.search_initial_yaw = self.teleop_subscriber.yaw
+            self.search_initial_yaw = self.teleop_sub.yaw
             self.info(
                 f"Starting search from yaw: {self.search_initial_yaw:.2f}")
 
-        current_yaw = self.teleop_subscriber.yaw
+        current_yaw = self.teleop_sub.yaw
 
         # Calculate how far we've rotated
         yaw_diff = abs(current_yaw - self.search_initial_yaw)
@@ -341,7 +341,8 @@ class Part4(Part2):
             self.search_initial_yaw = None
         else:
             # Continue rotating
-            self.info(f"[SEARCH] Rotating: yaw_diff={yaw_diff:.2f}, scan_speed={self.scan_speed}")
+            self.info(
+                f"[SEARCH] Rotating: yaw_diff={yaw_diff:.2f}, scan_speed={self.scan_speed}")
             self.teleop_publisher.set_velocity(0.0, self.scan_speed)
 
     def _finish_action(self):
