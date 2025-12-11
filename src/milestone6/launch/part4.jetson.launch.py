@@ -116,7 +116,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         *launch_args,
-        cli_node,
+        # cli_node,
         llama_publisher_node,
         espeak_subscriber_node,
     ])
