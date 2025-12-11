@@ -71,60 +71,27 @@ from launch_ros.actions import Node
 def generate_launch_description():
     """Generate launch description for Part 4 Remote PC (LLaMA + Espeak)."""
 
-    # Declare launch arguments for LLaMA
-    model_path_arg = DeclareLaunchArgument(
-        'model_path',
-        default_value='',
-        description='Path to LLaMA model (empty=use default from LlamaBackend)'
-    )
-
-    instruct_arg = DeclareLaunchArgument(
-        'instruct',
-        default_value='true',
-        description='Use instruct model variant'
-    )
-
-    n_ctx_arg = DeclareLaunchArgument(
-        'n_ctx',
-        default_value='512',
-        description='Context window size'
-    )
-
-    n_threads_arg = DeclareLaunchArgument(
-        'n_threads',
-        default_value='4',
-        description='Number of CPU threads'
-    )
-
-    n_gpu_layers_arg = DeclareLaunchArgument(
-        'n_gpu_layers',
-        default_value='33',
-        description='Number of GPU layers to offload'
-    )
-
-    temperature_arg = DeclareLaunchArgument(
-        'temperature',
-        default_value='0.7',
-        description='Sampling temperature (lower=more deterministic)'
-    )
-
-    top_p_arg = DeclareLaunchArgument(
-        'top_p',
-        default_value='0.95',
-        description='Top-p sampling parameter'
-    )
-
-    max_tokens_arg = DeclareLaunchArgument(
-        'max_tokens',
-        default_value='128',
-        description='Maximum tokens in response'
-    )
-
-    speech_rate_arg = DeclareLaunchArgument(
-        'speech_rate',
-        default_value='140',
-        description='Espeak speech rate in words per minute'
-    )
+    # Declare launch arguments
+    launch_args = [
+        DeclareLaunchArgument('model_path', default_value='',
+                              description='Path to LLaMA model (empty=use default from LlamaBackend)'),
+        DeclareLaunchArgument('instruct', default_value='true',
+                              description='Use instruct model variant'),
+        DeclareLaunchArgument('n_ctx', default_value='512',
+                              description='Context window size'),
+        DeclareLaunchArgument('n_threads', default_value='4',
+                              description='Number of CPU threads'),
+        DeclareLaunchArgument('n_gpu_layers', default_value='33',
+                              description='Number of GPU layers to offload'),
+        DeclareLaunchArgument('temperature', default_value='0.7',
+                              description='Sampling temperature (lower=more deterministic)'),
+        DeclareLaunchArgument('top_p', default_value='0.95',
+                              description='Top-p sampling parameter'),
+        DeclareLaunchArgument('max_tokens', default_value='128',
+                              description='Maximum tokens in response'),
+        DeclareLaunchArgument('speech_rate', default_value='140',
+                              description='Espeak speech rate in words per minute'),
+    ]
 
     # LLaMA Publisher Node
     llama_publisher_node = Node(
@@ -157,15 +124,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         # Launch arguments
-        model_path_arg,
-        instruct_arg,
-        n_ctx_arg,
-        n_threads_arg,
-        n_gpu_layers_arg,
-        temperature_arg,
-        top_p_arg,
-        max_tokens_arg,
-        speech_rate_arg,
+        *launch_args,
         # Nodes
         llama_publisher_node,
         espeak_subscriber_node,

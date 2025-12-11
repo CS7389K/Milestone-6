@@ -73,11 +73,24 @@ def generate_launch_description():
                               description='Centering tolerance in pixels'),
         DeclareLaunchArgument('target_bbox_width', default_value='365',
                               description='Target bounding box width for approach in pixels'),
-        DeclareLaunchArgument('turn_speed', default_value='0.2',
+        DeclareLaunchArgument('turn_speed', default_value='0.25',
                               description='Angular velocity in rad/s'),
-        DeclareLaunchArgument('detection_timeout', default_value='0.5',
+        DeclareLaunchArgument('detection_timeout', default_value='1.0',
                               description='Stop if no detection for this many seconds'),
     ]
+
+    # Hardware Launch (conditional)
+    hardware_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            FindPackageShare('turtlebot3_manipulation_bringup'),
+            '/launch/hardware.launch.py'
+        ]),
+        launch_arguments={
+            'log_level': 'error'
+        }.items(),
+        condition=IfCondition(LaunchConfiguration('include_hardware'))
+    )
+    
     # YOLO Publisher Node
     yolo_publisher_node = Node(
         package='milestone6',
@@ -93,18 +106,6 @@ def generate_launch_description():
             'camera_device': LaunchConfiguration('camera_device'),
             'gstreamer_pipeline': LaunchConfiguration('gstreamer_pipeline'),
         }]
-    )
-
-    # Hardware Launch (conditional)
-    hardware_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            FindPackageShare('turtlebot3_manipulation_bringup'),
-            '/launch/hardware.launch.py'
-        ]),
-        launch_arguments={
-            'log_level': 'error'
-        }.items(),
-        condition=IfCondition(LaunchConfiguration('include_hardware'))
     )
 
     # Teleop Publisher Node

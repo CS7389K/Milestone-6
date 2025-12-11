@@ -50,29 +50,26 @@ def generate_launch_description():
     """Generate launch description for Part 3 NLP (Whisper only)."""
 
     # Declare launch arguments
-    device_arg = DeclareLaunchArgument(
-        'device',
-        default_value='cpu',
-        description='Device for Whisper inference (cpu or cuda)'
-    )
-
-    model_type_arg = DeclareLaunchArgument(
-        'model_type',
-        default_value='small',
-        description='Whisper model type (tiny, base, small, medium, large)'
-    )
-
-    temperature_arg = DeclareLaunchArgument(
-        'temperature',
-        default_value='0.0',
-        description='Whisper sampling temperature'
-    )
-
-    speech_rate_arg = DeclareLaunchArgument(
-        'speech_rate',
-        default_value='140',
-        description='Espeak speech rate in words per minute'
-    )
+    launch_args = [
+        DeclareLaunchArgument('device', default_value='cpu',
+                              description='Device for Whisper inference (cpu or cuda)'),
+        DeclareLaunchArgument('model', default_value='tiny.en',
+                              description='Whisper model type (tiny, base, small, medium, large)'),
+        DeclareLaunchArgument('temperature', default_value='0.0',
+                              description='Whisper sampling temperature'),
+        DeclareLaunchArgument('timer_period', default_value='1.0',
+                              description='Timer period for listening loop in seconds'),
+        DeclareLaunchArgument('audio_sample_rate', default_value='16000',
+                              description='Audio sample rate in Hz'),
+        DeclareLaunchArgument('audio_duration', default_value='5.0',
+                              description='Audio recording duration in seconds'),
+        DeclareLaunchArgument('audio_threshold', default_value='800',
+                              description='Amplitude threshold for voice activity detection'),
+        DeclareLaunchArgument('audio_file', default_value='/tmp/whisper_audio.wav',
+                              description='Path to save audio recordings'),
+        DeclareLaunchArgument('speech_rate', default_value='140',
+                              description='Espeak speech rate in words per minute'),
+    ]
 
     # Whisper Publisher Node
     whisper_publisher_node = Node(
@@ -82,8 +79,13 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'device': LaunchConfiguration('device'),
-            'model_type': LaunchConfiguration('model_type'),
+            'model': LaunchConfiguration('model'),
             'temperature': LaunchConfiguration('temperature'),
+            'timer_period': LaunchConfiguration('timer_period'),
+            'audio_sample_rate': LaunchConfiguration('audio_sample_rate'),
+            'audio_duration': LaunchConfiguration('audio_duration'),
+            'audio_threshold': LaunchConfiguration('audio_threshold'),
+            'audio_file': LaunchConfiguration('audio_file'),
         }]
     )
 
@@ -100,10 +102,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         # Launch arguments
-        device_arg,
-        model_type_arg,
-        temperature_arg,
-        speech_rate_arg,
+        *launch_args,
         # Nodes
         whisper_publisher_node,
         espeak_subscriber_node

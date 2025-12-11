@@ -64,161 +64,77 @@ def generate_launch_description():
     """Generate launch description for Part 2 mission."""
 
     # Declare launch arguments
-    include_hardware_arg = DeclareLaunchArgument(
-        'include_hardware',
-        default_value='true',
-        description='Include hardware.launch.py (only use when running on TurtleBot itself)'
-    )
-
-    yolo_model_arg = DeclareLaunchArgument(
-        'yolo_model',
-        default_value='yolo11n.pt',
-        description='Path to YOLO model file'
-    )
-
-    image_width_arg = DeclareLaunchArgument(
-        'image_width',
-        default_value='1280',
-        description='Camera image width in pixels'
-    )
-
-    image_height_arg = DeclareLaunchArgument(
-        'image_height',
-        default_value='720',
-        description='Camera image height in pixels'
-    )
-
-    display_arg = DeclareLaunchArgument(
-        'display',
-        default_value='true',
-        description='Display YOLO detection window'
-    )
-
-    tracking_classes_arg = DeclareLaunchArgument(
-        'tracking_classes',
-        default_value='39',
-        description='Comma-separated COCO class IDs to track (e.g., "39,41" for bottle and cup)'
-    )
-
-    bbox_tolerance_arg = DeclareLaunchArgument(
-        'bbox_tolerance',
-        default_value='20',
-        description='Bounding box width tolerance in pixels'
-    )
-
-    center_tolerance_arg = DeclareLaunchArgument(
-        'center_tolerance',
-        default_value='30',
-        description='Centering tolerance in pixels'
-    )
-
-    target_bbox_width_arg = DeclareLaunchArgument(
-        'target_bbox_width',
-        default_value='365',
-        description='Ideal bounding box width for grabbing in pixels'
-    )
-
-    speed_arg = DeclareLaunchArgument(
-        'speed',
-        default_value='0.05',
-        description='Linear velocity in m/s'
-    )
-
-    turn_speed_arg = DeclareLaunchArgument(
-        'turn_speed',
-        default_value='0.25',
-        description='Angular velocity in rad/s'
-    )
-
-    transport_distance_arg = DeclareLaunchArgument(
-        'transport_distance',
-        default_value='0.10',
-        description='Distance to transport object in meters'
-    )
-
-    detection_timeout_arg = DeclareLaunchArgument(
-        'detection_timeout',
-        default_value='1.0',
-        description='Detection timeout in seconds'
-    )
-
-    # Arm joint position arguments
-    grab_joint2_arg = DeclareLaunchArgument(
-        'grab_joint2', default_value='0.95',
-        description='Grab position: forward reach (radians)'
-    )
-    grab_joint3_arg = DeclareLaunchArgument(
-        'grab_joint3', default_value='-0.65',
-        description='Grab position: extend elbow (radians)'
-    )
-    grab_joint4_arg = DeclareLaunchArgument(
-        'grab_joint4', default_value='0.0',
-        description='Grab position: level gripper (radians)'
-    )
-    grab_vertical_adjust_arg = DeclareLaunchArgument(
-        'grab_vertical_adjust', default_value='0.2',
-        description='Extra reach for low objects (radians)'
-    )
-    grasp_extension_arg = DeclareLaunchArgument(
-        'grasp_extension', default_value='0.2',
-        description='Extra extension to grasp (radians)'
-    )
-
-    lift_joint2_arg = DeclareLaunchArgument(
-        'lift_joint2', default_value='-0.5',
-        description='Lift position: lift up (radians)'
-    )
-    lift_joint3_arg = DeclareLaunchArgument(
-        'lift_joint3', default_value='0.4',
-        description='Lift position: retract (radians)'
-    )
-    lift_joint4_arg = DeclareLaunchArgument(
-        'lift_joint4', default_value='0.6',
-        description='Lift position: adjust wrist (radians)'
-    )
-
-    lower_joint1_arg = DeclareLaunchArgument(
-        'lower_joint1', default_value='0.0',
-        description='Lower position: center (radians)'
-    )
-    lower_joint2_arg = DeclareLaunchArgument(
-        'lower_joint2', default_value='0.6',
-        description='Lower position: down (radians)'
-    )
-    lower_joint3_arg = DeclareLaunchArgument(
-        'lower_joint3', default_value='-0.4',
-        description='Lower position: extend (radians)'
-    )
-    lower_joint4_arg = DeclareLaunchArgument(
-        'lower_joint4', default_value='0.6',
-        description='Lower position: level (radians)'
-    )
-
-    home_joint1_arg = DeclareLaunchArgument(
-        'home_joint1', default_value='0.0',
-        description='Home position: joint1 (radians)'
-    )
-    home_joint2_arg = DeclareLaunchArgument(
-        'home_joint2', default_value='-1.05',
-        description='Home position: joint2 (radians)'
-    )
-    home_joint3_arg = DeclareLaunchArgument(
-        'home_joint3', default_value='0.35',
-        description='Home position: joint3 (radians)'
-    )
-    home_joint4_arg = DeclareLaunchArgument(
-        'home_joint4', default_value='0.70',
-        description='Home position: joint4 (radians)'
-    )
-
-    gripper_open_arg = DeclareLaunchArgument(
-        'gripper_open', default_value='0.025',
-        description='Gripper open position'
-    )
-    gripper_close_arg = DeclareLaunchArgument(
-        'gripper_close', default_value='-0.015',
-        description='Gripper close position'
-    )
+    launch_args = [
+        DeclareLaunchArgument('include_hardware', default_value='true',
+                              description='Include hardware.launch.py (only use when running on TurtleBot itself)'),
+        DeclareLaunchArgument('yolo_model', default_value='yolo11n.pt',
+                              description='Path to YOLO model file'),
+        DeclareLaunchArgument('image_width', default_value='1280',
+                              description='Camera image width in pixels'),
+        DeclareLaunchArgument('image_height', default_value='720',
+                              description='Camera image height in pixels'),
+        DeclareLaunchArgument('display', default_value='true',
+                              description='Display YOLO detection window'),
+        DeclareLaunchArgument('camera_backend', default_value='gstreamer',
+                              description='Camera backend (gstreamer, opencv)'),
+        DeclareLaunchArgument('camera_device', default_value='1',
+                              description='Camera device ID'),
+        DeclareLaunchArgument('gstreamer_pipeline', default_value='',
+                              description='Custom GStreamer pipeline'),
+        DeclareLaunchArgument('tracking_classes', default_value='39',
+                              description='Comma-separated COCO class IDs to track (e.g., "39,41" for bottle and cup)'),
+        DeclareLaunchArgument('bbox_tolerance', default_value='20',
+                              description='Bounding box width tolerance in pixels'),
+        DeclareLaunchArgument('center_tolerance', default_value='30',
+                              description='Centering tolerance in pixels'),
+        DeclareLaunchArgument('target_bbox_width', default_value='365',
+                              description='Ideal bounding box width for grabbing in pixels'),
+        DeclareLaunchArgument('speed', default_value='0.05',
+                              description='Linear velocity in m/s'),
+        DeclareLaunchArgument('turn_speed', default_value='0.25',
+                              description='Angular velocity in rad/s'),
+        DeclareLaunchArgument('transport_distance', default_value='0.10',
+                              description='Distance to transport object in meters'),
+        DeclareLaunchArgument('detection_timeout', default_value='1.0',
+                              description='Detection timeout in seconds'),
+        # Arm joint position arguments
+        DeclareLaunchArgument('grab_joint2', default_value='0.95',
+                              description='Grab position: forward reach (radians)'),
+        DeclareLaunchArgument('grab_joint3', default_value='-0.65',
+                              description='Grab position: extend elbow (radians)'),
+        DeclareLaunchArgument('grab_joint4', default_value='0.0',
+                              description='Grab position: level gripper (radians)'),
+        DeclareLaunchArgument('grab_vertical_adjust', default_value='0.2',
+                              description='Extra reach for low objects (radians)'),
+        DeclareLaunchArgument('grasp_extension', default_value='0.2',
+                              description='Extra extension to grasp (radians)'),
+        DeclareLaunchArgument('lift_joint2', default_value='-0.5',
+                              description='Lift position: lift up (radians)'),
+        DeclareLaunchArgument('lift_joint3', default_value='0.4',
+                              description='Lift position: retract (radians)'),
+        DeclareLaunchArgument('lift_joint4', default_value='0.6',
+                              description='Lift position: adjust wrist (radians)'),
+        DeclareLaunchArgument('lower_joint1', default_value='0.0',
+                              description='Lower position: center (radians)'),
+        DeclareLaunchArgument('lower_joint2', default_value='0.6',
+                              description='Lower position: down (radians)'),
+        DeclareLaunchArgument('lower_joint3', default_value='-0.4',
+                              description='Lower position: extend (radians)'),
+        DeclareLaunchArgument('lower_joint4', default_value='0.6',
+                              description='Lower position: level (radians)'),
+        DeclareLaunchArgument('home_joint1', default_value='0.0',
+                              description='Home position: joint1 (radians)'),
+        DeclareLaunchArgument('home_joint2', default_value='-1.05',
+                              description='Home position: joint2 (radians)'),
+        DeclareLaunchArgument('home_joint3', default_value='0.35',
+                              description='Home position: joint3 (radians)'),
+        DeclareLaunchArgument('home_joint4', default_value='0.70',
+                              description='Home position: joint4 (radians)'),
+        DeclareLaunchArgument('gripper_open', default_value='0.025',
+                              description='Gripper open position'),
+        DeclareLaunchArgument('gripper_close', default_value='-0.015',
+                              description='Gripper close position'),
+    ]
 
     # Hardware Launch (conditional)
     hardware_launch = IncludeLaunchDescription(
@@ -243,6 +159,9 @@ def generate_launch_description():
             'image_width': LaunchConfiguration('image_width'),
             'image_height': LaunchConfiguration('image_height'),
             'display': LaunchConfiguration('display'),
+            'camera_backend': LaunchConfiguration('camera_backend'),
+            'camera_device': LaunchConfiguration('camera_device'),
+            'gstreamer_pipeline': LaunchConfiguration('gstreamer_pipeline'),
         }]
     )
 
@@ -253,17 +172,16 @@ def generate_launch_description():
         name='part2',
         output='screen',
         parameters=[{
-            'tracking_classes': LaunchConfiguration('tracking_classes'),
             'image_width': LaunchConfiguration('image_width'),
             'image_height': LaunchConfiguration('image_height'),
             'speed': LaunchConfiguration('speed'),
             'turn_speed': LaunchConfiguration('turn_speed'),
+            'tracking_classes': LaunchConfiguration('tracking_classes'),
             'bbox_tolerance': LaunchConfiguration('bbox_tolerance'),
             'center_tolerance': LaunchConfiguration('center_tolerance'),
             'target_bbox_width': LaunchConfiguration('target_bbox_width'),
             'detection_timeout': LaunchConfiguration('detection_timeout'),
             'transport_distance': LaunchConfiguration('transport_distance'),
-            # Arm joint positions
             'grab_joint2': LaunchConfiguration('grab_joint2'),
             'grab_joint3': LaunchConfiguration('grab_joint3'),
             'grab_joint4': LaunchConfiguration('grab_joint4'),
@@ -287,38 +205,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         # Launch arguments
-        include_hardware_arg,
-        yolo_model_arg,
-        image_width_arg,
-        image_height_arg,
-        display_arg,
-        tracking_classes_arg,
-        bbox_tolerance_arg,
-        center_tolerance_arg,
-        target_bbox_width_arg,
-        speed_arg,
-        turn_speed_arg,
-        transport_distance_arg,
-        detection_timeout_arg,
-        # Arm joint arguments
-        grab_joint2_arg,
-        grab_joint3_arg,
-        grab_joint4_arg,
-        grab_vertical_adjust_arg,
-        grasp_extension_arg,
-        lift_joint2_arg,
-        lift_joint3_arg,
-        lift_joint4_arg,
-        lower_joint1_arg,
-        lower_joint2_arg,
-        lower_joint3_arg,
-        lower_joint4_arg,
-        home_joint1_arg,
-        home_joint2_arg,
-        home_joint3_arg,
-        home_joint4_arg,
-        gripper_open_arg,
-        gripper_close_arg,
+        *launch_args,
         # Hardware (conditional)
         hardware_launch,
         # Nodes

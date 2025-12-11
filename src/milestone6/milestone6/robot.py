@@ -77,10 +77,10 @@ class Robot(Node, ABC):
         self.info(f"Initializing Robot {node_name}...")
 
         # Declare and set merged parameters
-        params = self._get_merged_params()
-        for param_name, default_value in params.items():
+        self.params = self._get_merged_params()
+        for param_name, default_value in self.params.items():
             self.declare_parameter(param_name, default_value)
-        for param_name in params.keys():
+        for param_name in self.params.keys():
             self.__setattr__(param_name, self.get_parameter(param_name).value)
 
         # Track when we last saw the target object
@@ -334,11 +334,3 @@ class Robot(Node, ABC):
     def error(self, msg: str):
         """Log an error message."""
         self.get_logger().error(msg)
-
-    # ---------------------------------------------------------------------------- #
-    #                                  Properties                                  #
-    # ---------------------------------------------------------------------------- #
-    @property
-    def parameters(self):
-        """Return current merged parameters as a dictionary."""
-        return self._get_merged_params()

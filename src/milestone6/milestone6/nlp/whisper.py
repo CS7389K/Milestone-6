@@ -26,23 +26,31 @@ class WhisperPublisher(Node):
 
         # Declare parameters
         self.declare_parameter('device', 'cpu')
-        self.declare_parameter('model_type', 'base.en')
+        self.declare_parameter('model', 'tiny.en')
         self.declare_parameter('temperature', 0.0)
         self.declare_parameter('timer_period', 1.0)
+        self.declare_parameter('audio_sample_rate', 16000)
+        self.declare_parameter('audio_duration', 5.0)
+        self.declare_parameter('audio_threshold', 800)
+        self.declare_parameter('audio_file', '/tmp/whisper_audio.wav')
 
         # Get parameters
         device = self.get_parameter('device').value
-        model_type = self.get_parameter('model_type').value
+        model = self.get_parameter('model').value
         temperature = self.get_parameter('temperature').value
         timer_period = self.get_parameter('timer_period').value
+        self.audio_sample_rate = self.get_parameter('audio_sample_rate').value
+        self.audio_duration = self.get_parameter('audio_duration').value
+        self.audio_threshold = self.get_parameter('audio_threshold').value
+        self.audio_file = self.get_parameter('audio_file').value
 
         self.get_logger().info("Initializing Whisper Publisher...")
-        self.get_logger().info(f"Model: {model_type}, Device: {device}")
+        self.get_logger().info(f"Model: {model}, Device: {device}")
         self.get_logger().info(f"Timer period: {timer_period}s")
 
         # Initialize Whisper backend
         self.whisper = WhisperBackend(
-            model_type=model_type,
+            model=model,
             device=device,
             temperature=temperature
         )
@@ -52,18 +60,7 @@ class WhisperPublisher(Node):
             String,
             '/voice_transcription',
             10
-        )
-
-        # Audio recording parameters
-        self.declare_parameter('audio_sample_rate', 16000)
-        self.declare_parameter('audio_duration', 5.0)
-        self.declare_parameter('audio_threshold', 500)
-        self.declare_parameter('audio_file', '/tmp/whisper_audio.wav')
-        
-        self.audio_sample_rate = self.get_parameter('audio_sample_rate').value
-        self.audio_duration = self.get_parameter('audio_duration').value
-        self.audio_threshold = self.get_parameter('audio_threshold').value
-        self.audio_file = self.get_parameter('audio_file').value
+        )        
 
         # Create timer to periodically listen for audio
         self.timer = self.create_timer(timer_period, self._listen)

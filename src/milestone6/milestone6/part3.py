@@ -52,13 +52,7 @@ class Part3(Part2):
         'turn_duration': 1.0,           # seconds
         'forward_duration': 0.5,        # seconds
         'scan_speed': 0.5,              # rad/s
-        'forward_speed_voice': 0.2,     # m/s for voice commands
-        'audio_file': '/tmp/voice_input.wav',
         'prompt_delay': 30.0,           # seconds between prompts
-        'audio_duration': 5,            # seconds
-        'audio_sample_rate': 16000,     # Hz
-        'audio_threshold': 500,         # Amplitude threshold
-        'use_whisper': True,            # Use Whisper subscriber
     }
 
     def __init__(self):
@@ -68,9 +62,9 @@ class Part3(Part2):
         # Change node name from 'part2' to 'part3'
         self._node_name = 'part3'
 
-        self.info(
-            "Initializing Part 3: Voice-Guided Object Search and Retrieval...")
-        self.info(f"Parameters: {self.parameters}")
+        self.info("Initializing Part 3: Voice-Guided Object \
+                  Search and Retrieval...")
+        self.info(f"Parameters: {self.params}")
 
         # ------------------- Text-to-Speech Publisher -------------------
         self.info("Creating text-to-speech publisher...")
@@ -79,20 +73,13 @@ class Part3(Part2):
             '/text_to_speech',
             10
         )
-
-        # Subscribe to audio commands from Whisper publisher
-        if self.use_whisper:
-            self.info("Subscribing to /voice_transcription topic...")
-            self.audio_command_sub = self.create_subscription(
-                String,
-                '/voice_transcription',
-                self._audio_command_callback,
-                10
-            )
-            self.last_audio_command = None
-        else:
-            self.warning("Whisper disabled - voice commands will not work!")
-            self.audio_command_sub = None
+        self.info("Subscribing to /voice_transcription topic...")
+        self.audio_command_sub = self.create_subscription(
+            String,
+            '/voice_transcription',
+            self._audio_command_callback,
+            10
+        )
 
         # ------------------- Voice-Specific State -------------------
         # Override Part2's initial state to start with voice search
@@ -105,6 +92,7 @@ class Part3(Part2):
         self.scan_start_angle = None
 
         # Voice prompt timing
+        self.last_audio_command = None
         self.last_prompt_time = None
 
         self.info("Part 3 initialized and ready.")
@@ -112,22 +100,6 @@ class Part3(Part2):
 
         # Give initial prompt
         self._speak("Ready for Command")
-
-    # ---------------------------------------------------------------------------- #
-    #                             Overridden Methods                               #
-    # ---------------------------------------------------------------------------- #
-    def _yolo_callback(self, data: YOLOData):
-        """Override to add voice search announcements."""
-        # Call parent implementation to update detection data
-        super()._yolo_callback(data)
-
-        # If in voice search and we detect bottle, announce it
-        if self.state == State.VOICE_SEARCH:
-            class_name = COCO_CLASSES.get(data.clz, f'unknown({data.clz})')
-            self.info(
-                f"[VOICE_SEARCH] {class_name} detected! "
-                f"BBox: ({data.bbox_x:.0f}, {data.bbox_y:.0f}, {data.bbox_w:.0f}x{data.bbox_h:.0f})"
-            )
 
     # ---------------------------------------------------------------------------- #
     #                          Voice Interaction Methods                           #
@@ -186,7 +158,7 @@ class Part3(Part2):
         elif cmd == 'forward':
             self._speak("Moving forward")
             self.teleop_publisher.set_velocity(
-                linear_x=self.forward_speed_voice, angular_z=0.0)
+                linear_x=self.speed, angular_z=0.0)
             self.cmd_duration = self.forward_duration
 
         elif cmd == 'scan':
@@ -340,11 +312,6 @@ class Part3(Part2):
     # ---------------------------------------------------------------------------- #
     #                             Shutdown Override                                #
     # ---------------------------------------------------------------------------- #
-    def shutdown(self):
-        """Clean shutdown."""
-        self.info("Shutting down Part 3...")
-        super().shutdown()
-
 
 def main(args=None):
     rclpy.init(args=args)
@@ -352,8 +319,6 @@ def main(args=None):
     try:
         node = Part3()
         rclpy.spin(node)
-    except KeyboardInterrupt:
-        print("\nShutting down Part 3...")
     except Exception as e:
         print(f"Error in Part 3: {e}")
         import traceback

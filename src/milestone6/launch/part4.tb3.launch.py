@@ -47,97 +47,46 @@ def generate_launch_description():
     """Generate launch description for Part 4 TurtleBot side."""
 
     # Declare launch arguments
-    include_hardware_arg = DeclareLaunchArgument(
-        'include_hardware',
-        default_value='true',
-        description='Include hardware.launch.py (only use when running on TurtleBot)'
-    )
-
-    yolo_model_arg = DeclareLaunchArgument(
-        'yolo_model',
-        default_value='yolo11n.pt',
-        description='Path to YOLO model file'
-    )
-
-    image_width_arg = DeclareLaunchArgument(
-        'image_width',
-        default_value='1280',
-        description='Camera image width in pixels'
-    )
-
-    image_height_arg = DeclareLaunchArgument(
-        'image_height',
-        default_value='720',
-        description='Camera image height in pixels'
-    )
-
-    display_arg = DeclareLaunchArgument(
-        'display',
-        default_value='true',
-        description='Display YOLO detection window'
-    )
-
-    tracking_classes_arg = DeclareLaunchArgument(
-        'tracking_classes',
-        default_value='39,73,64',
-        description='Comma-separated COCO class IDs (39=bottle, 73=bear, 64=mouse)'
-    )
-
-    # LLM action execution parameters
-    turn_duration_arg = DeclareLaunchArgument(
-        'turn_duration',
-        default_value='1.0',
-        description='Duration for turn commands in seconds'
-    )
-
-    forward_duration_arg = DeclareLaunchArgument(
-        'forward_duration',
-        default_value='0.5',
-        description='Duration for forward commands in seconds'
-    )
-
-    scan_speed_arg = DeclareLaunchArgument(
-        'scan_speed',
-        default_value='0.5',
-        description='Rotation speed for scan command in rad/s'
-    )
-
-    forward_speed_llm_arg = DeclareLaunchArgument(
-        'forward_speed_llm',
-        default_value='0.2',
-        description='Linear velocity for LLM forward commands in m/s'
-    )
-
-    # Visual servoing parameters
-    center_tolerance_arg = DeclareLaunchArgument(
-        'center_tolerance',
-        default_value='30',
-        description='Centering tolerance in pixels'
-    )
-
-    target_bbox_width_arg = DeclareLaunchArgument(
-        'target_bbox_width',
-        default_value='365',
-        description='Ideal bounding box width for grabbing in pixels'
-    )
-
-    forward_speed_arg = DeclareLaunchArgument(
-        'forward_speed',
-        default_value='0.05',
-        description='Linear velocity in m/s for visual servoing'
-    )
-
-    turn_speed_arg = DeclareLaunchArgument(
-        'turn_speed',
-        default_value='0.25',
-        description='Angular velocity in rad/s for visual servoing'
-    )
-
-    transport_distance_arg = DeclareLaunchArgument(
-        'transport_distance',
-        default_value='0.10',
-        description='Distance to transport object in meters'
-    )
+    launch_args = [
+        DeclareLaunchArgument('include_hardware', default_value='true',
+                              description='Include hardware.launch.py (only use when running on TurtleBot)'),
+        DeclareLaunchArgument('yolo_model', default_value='yolo11n.pt',
+                              description='Path to YOLO model file'),
+        DeclareLaunchArgument('image_width', default_value='1280',
+                              description='Camera image width in pixels'),
+        DeclareLaunchArgument('image_height', default_value='720',
+                              description='Camera image height in pixels'),
+        DeclareLaunchArgument('display', default_value='true',
+                              description='Display YOLO detection window'),
+        DeclareLaunchArgument('camera_backend', default_value='gstreamer',
+                              description='Camera backend (gstreamer, opencv)'),
+        DeclareLaunchArgument('camera_device', default_value='1',
+                              description='Camera device ID'),
+        DeclareLaunchArgument('gstreamer_pipeline', default_value='',
+                              description='Custom GStreamer pipeline'),
+        DeclareLaunchArgument('tracking_classes', default_value='39,73,64',
+                              description='Comma-separated COCO class IDs (39=bottle, 73=bear, 64=mouse)'),
+        # LLM action execution parameters
+        DeclareLaunchArgument('turn_duration', default_value='1.0',
+                              description='Duration for turn commands in seconds'),
+        DeclareLaunchArgument('forward_duration', default_value='0.5',
+                              description='Duration for forward commands in seconds'),
+        DeclareLaunchArgument('scan_speed', default_value='0.5',
+                              description='Rotation speed for scan command in rad/s'),
+        DeclareLaunchArgument('forward_speed_llm', default_value='0.2',
+                              description='Linear velocity for LLM forward commands in m/s'),
+        # Visual servoing parameters
+        DeclareLaunchArgument('center_tolerance', default_value='30',
+                              description='Centering tolerance in pixels'),
+        DeclareLaunchArgument('target_bbox_width', default_value='365',
+                              description='Ideal bounding box width for grabbing in pixels'),
+        DeclareLaunchArgument('forward_speed', default_value='0.05',
+                              description='Linear velocity in m/s for visual servoing'),
+        DeclareLaunchArgument('turn_speed', default_value='0.25',
+                              description='Angular velocity in rad/s for visual servoing'),
+        DeclareLaunchArgument('transport_distance', default_value='0.10',
+                              description='Distance to transport object in meters'),
+    ]
 
     # Hardware Launch (conditional)
     hardware_launch = IncludeLaunchDescription(
@@ -162,6 +111,9 @@ def generate_launch_description():
             'image_width': LaunchConfiguration('image_width'),
             'image_height': LaunchConfiguration('image_height'),
             'display': LaunchConfiguration('display'),
+            'camera_backend': LaunchConfiguration('camera_backend'),
+            'camera_device': LaunchConfiguration('camera_device'),
+            'gstreamer_pipeline': LaunchConfiguration('gstreamer_pipeline'),
         }]
     )
 
@@ -173,64 +125,45 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             # LLM action parameters
+            'forward_speed_llm': LaunchConfiguration('forward_speed_llm'),
             'turn_duration': LaunchConfiguration('turn_duration'),
             'forward_duration': LaunchConfiguration('forward_duration'),
             'scan_speed': LaunchConfiguration('scan_speed'),
-            'forward_speed_llm': LaunchConfiguration('forward_speed_llm'),
-            # Visual servoing parameters
-            'tracking_classes': LaunchConfiguration('tracking_classes'),
+            'prompt_delay': LaunchConfiguration('prompt_delay'),
             'image_width': LaunchConfiguration('image_width'),
             'image_height': LaunchConfiguration('image_height'),
-            'bbox_tolerance': 20,
+            'speed': LaunchConfiguration('speed'),
+            'turn_speed': LaunchConfiguration('turn_speed'),
+            'tracking_classes': LaunchConfiguration('tracking_classes'),
+            'bbox_tolerance': LaunchConfiguration('bbox_tolerance'),
             'center_tolerance': LaunchConfiguration('center_tolerance'),
             'target_bbox_width': LaunchConfiguration('target_bbox_width'),
-            'forward_speed': LaunchConfiguration('forward_speed'),
-            'turn_speed': LaunchConfiguration('turn_speed'),
-            'detection_timeout': 1,
+            'detection_timeout': LaunchConfiguration('detection_timeout'),
             'transport_distance': LaunchConfiguration('transport_distance'),
-            # Arm grab positions
-            'grab_joint2': 0.95,
-            'grab_joint3': -0.65,
-            'grab_joint4': 0.0,
-            'grab_vertical_adjust': 0.2,
-            'grasp_extension': 0.2,
-            # Arm lift positions
-            'lift_joint2': -0.5,
-            'lift_joint3': 0.4,
-            'lift_joint4': 0.6,
-            # Arm lower positions
-            'lower_joint1': 0.0,
-            'lower_joint2': 0.6,
-            'lower_joint3': -0.4,
-            'lower_joint4': 0.6,
-            # Arm home positions
-            'home_joint1': 0.0,
-            'home_joint2': -1.05,
-            'home_joint3': 0.35,
-            'home_joint4': 0.70,
-            # Gripper positions
-            'gripper_open': 0.025,
-            'gripper_close': -0.015,
+            'grab_joint2': LaunchConfiguration('grab_joint2'),
+            'grab_joint3': LaunchConfiguration('grab_joint3'),
+            'grab_joint4': LaunchConfiguration('grab_joint4'),
+            'grab_vertical_adjust': LaunchConfiguration('grab_vertical_adjust'),
+            'grasp_extension': LaunchConfiguration('grasp_extension'),
+            'lift_joint2': LaunchConfiguration('lift_joint2'),
+            'lift_joint3': LaunchConfiguration('lift_joint3'),
+            'lift_joint4': LaunchConfiguration('lift_joint4'),
+            'lower_joint1': LaunchConfiguration('lower_joint1'),
+            'lower_joint2': LaunchConfiguration('lower_joint2'),
+            'lower_joint3': LaunchConfiguration('lower_joint3'),
+            'lower_joint4': LaunchConfiguration('lower_joint4'),
+            'home_joint1': LaunchConfiguration('home_joint1'),
+            'home_joint2': LaunchConfiguration('home_joint2'),
+            'home_joint3': LaunchConfiguration('home_joint3'),
+            'home_joint4': LaunchConfiguration('home_joint4'),
+            'gripper_open': LaunchConfiguration('gripper_open'),
+            'gripper_close': LaunchConfiguration('gripper_close'),
         }]
     )
 
     return LaunchDescription([
         # Launch arguments
-        include_hardware_arg,
-        yolo_model_arg,
-        image_width_arg,
-        image_height_arg,
-        display_arg,
-        tracking_classes_arg,
-        turn_duration_arg,
-        forward_duration_arg,
-        scan_speed_arg,
-        forward_speed_llm_arg,
-        center_tolerance_arg,
-        target_bbox_width_arg,
-        forward_speed_arg,
-        turn_speed_arg,
-        transport_distance_arg,
+        *launch_args,
         # Nodes
         hardware_launch,
         yolo_publisher_node,
