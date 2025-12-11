@@ -342,10 +342,14 @@ class Part3(Node):
     def detection_is_fresh(self):
         """Check if we have a recent detection."""
         if self.last_detection_time is None:
+            self.get_logger().debug("No detection time set")
             return False
         elapsed = (self.get_clock().now() -
                    self.last_detection_time).nanoseconds / 1e9
-        return elapsed < self.detection_timeout
+        is_fresh = elapsed < self.detection_timeout
+        self.get_logger().debug(
+            f"Detection age: {elapsed:.3f}s, fresh: {is_fresh}")
+        return is_fresh
 
     def stop_base(self):
         """Stop base movement."""
@@ -364,7 +368,10 @@ class Part3(Node):
         return bbox_error <= self.bbox_tolerance
 
     def center_on_object(self, yolo_data: YOLOData):
-        """Center object in frame. Returns True if centered."""
+        """
+        Calculate and apply turning velocity to center object.
+        Returns True if centered, False otherwise.
+        """
         obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
         image_center_x = self.image_width / 2.0
         offset_x = obj_center_x - image_center_x
@@ -373,15 +380,21 @@ class Part3(Node):
             self.stop_base()
             return True
 
+        # Calculate turning velocity (negative offset = object left = turn left)
         angular_ratio = -offset_x / (self.image_width / 2.0)
-        angular_ratio = max(-1.0, min(1.0, angular_ratio))
+        angular_ratio = max(-1.0, min(1.0, angular_ratio))  # Clamp to [-1, 1]
         angular_vel = angular_ratio * self.turn_speed
 
         self.teleop_pub.set_velocity(linear_x=0.0, angular_z=angular_vel)
+        self.get_logger().debug(
+            f"Centering: offset={offset_x:.1f}px, angular={angular_vel:.2f} rad/s")
         return False
 
     def approach_object(self, yolo_data: YOLOData):
-        """Move to ideal grabbing distance. Returns True if at correct distance."""
+        """
+        Move forward/backward to achieve ideal grabbing distance.
+        Returns True if at correct distance, False otherwise.
+        """
         bbox_error = yolo_data.bbox_w - self.target_bbox_width
 
         if abs(bbox_error) <= self.bbox_tolerance:
@@ -389,19 +402,35 @@ class Part3(Node):
             return True
 
         if bbox_error < -self.bbox_tolerance:
+            # Too far, move forward
             linear_vel = self.forward_speed
+            self.get_logger().debug(
+                f"Too far (bbox={yolo_data.bbox_w:.0f}px), moving forward")
         else:
+            # Too close, move backward
             linear_vel = -self.forward_speed * 0.5
+            self.get_logger().debug(
+                f"Too close (bbox={yolo_data.bbox_w:.0f}px), backing up")
 
         self.teleop_pub.set_velocity(linear_x=linear_vel, angular_z=0.0)
         return False
 
     def send_arm_trajectory(self, positions: dict, time_sec: float = 2.0):
-        """Send arm trajectory using FollowJointTrajectory action."""
+        """
+        Send arm trajectory using FollowJointTrajectory action.
+
+        Args:
+            positions: Dict mapping joint names to target positions (radians)
+            time_sec: Time to reach target position
+
+        Returns:
+            Future for the action goal
+        """
         if not self.arm_client.wait_for_server(timeout_sec=1.0):
             self.get_logger().error("Arm controller not available!")
             return None
 
+        # Create trajectory
         joint_names = ['joint1', 'joint2', 'joint3', 'joint4']
         trajectory = JointTrajectory()
         trajectory.joint_names = joint_names
@@ -414,6 +443,7 @@ class Part3(Node):
         )
         trajectory.points = [point]
 
+        # Send goal
         goal = FollowJointTrajectory.Goal()
         goal.trajectory = trajectory
 
@@ -422,7 +452,15 @@ class Part3(Node):
         return future
 
     def send_gripper_command(self, position: float):
-        """Send gripper command using GripperCommand action."""
+        """
+        Send gripper command using GripperCommand action.
+
+        Args:
+            position: Gripper position (0.025 = open, -0.015 = close)
+
+        Returns:
+            Future for the action goal
+        """
         if not self.gripper_client.wait_for_server(timeout_sec=1.0):
             self.get_logger().error("Gripper controller not available!")
             return None
@@ -437,25 +475,33 @@ class Part3(Node):
         return future
 
     def calculate_grab_position(self, yolo_data: YOLOData):
-        """Calculate arm position for grabbing based on object location."""
+        """
+        Calculate arm position for grabbing based on object location.
+        Uses simple visual servoing approach.
+        """
         obj_center_x = yolo_data.bbox_x + (yolo_data.bbox_w / 2.0)
         obj_center_y = yolo_data.bbox_y + (yolo_data.bbox_h / 2.0)
 
+        # Normalize positions
         norm_x = (obj_center_x - (self.image_width / 2.0)) / \
             (self.image_width / 2.0)
         norm_y = (obj_center_y - (self.image_height / 2.0)) / \
             (self.image_height / 2.0)
 
+        # Joint 1: Pan (base rotation) - camera FOV ~62°
         camera_hfov_rad = math.radians(62.0)
         joint1 = norm_x * (camera_hfov_rad / 2.0)
-        joint1 = max(-1.5, min(1.5, joint1))
+        joint1 = max(-1.5, min(1.5, joint1))  # Safety limits
 
+        # Joints 2-4: Forward reach configuration
+        # These values position arm for grabbing at optimal distance
         joint2 = self.grab_joint2
         joint3 = self.grab_joint3
         joint4 = self.grab_joint4
 
-        if norm_y > 0.2:
-            joint2 += self.grab_vertical_adjust
+        # Adjust reach based on vertical position
+        if norm_y > 0.2:  # Object low in frame
+            joint2 += self.grab_vertical_adjust  # Reach down more
 
         return {
             'joint1': joint1,
@@ -463,6 +509,7 @@ class Part3(Node):
             'joint3': joint3,
             'joint4': joint4
         }
+
 
     # ------------------------------------------------------------------
     # State Machine
@@ -592,6 +639,7 @@ class Part3(Node):
             self.get_logger().info("=" * 70 + "\n")
 
             self._speak("Mission complete")
+            self._speak("Ready for Command")
 
             # Reset for next mission
             self.last_yolo_data = None
@@ -604,8 +652,9 @@ class Part3(Node):
     # Part 2 Sequences
     # ------------------------------------------------------------------
     def _execute_grab_sequence(self):
-        """Multi-step grabbing sequence (from Part 2)."""
+        """Multi-step grabbing sequence using FollowJointTrajectory."""
 
+        # Step 0: Open gripper
         if self.grab_step == 0:
             self.get_logger().info("[GRAB] Step 0: Opening gripper...")
             self.gripper_action_future = self.send_gripper_command(
@@ -613,6 +662,7 @@ class Part3(Node):
             self.step_start_time = self.get_clock().now()
             self.grab_step = 1
 
+        # Step 1: Wait for gripper to open
         elif self.grab_step == 1:
             elapsed = (self.get_clock().now() -
                        self.step_start_time).nanoseconds / 1e9
@@ -625,11 +675,13 @@ class Part3(Node):
                 self.step_start_time = self.get_clock().now()
                 self.grab_step = 2
 
+        # Step 2: Wait for arm to position
         elif self.grab_step == 2:
             elapsed = (self.get_clock().now() -
                        self.step_start_time).nanoseconds / 1e9
-            if elapsed >= 3.0:
+            if elapsed >= 3.0:  # Give extra time for trajectory
                 self.get_logger().info("[GRAB] Step 2: Extending to grasp...")
+                # Extend slightly more to grasp
                 current = self.teleop_sub.joint_positions
                 grasp_pos = {
                     'joint1': current.get('joint1', 0.0),
@@ -642,6 +694,7 @@ class Part3(Node):
                 self.step_start_time = self.get_clock().now()
                 self.grab_step = 3
 
+        # Step 3: Wait for extension, then close gripper
         elif self.grab_step == 3:
             elapsed = (self.get_clock().now() -
                        self.step_start_time).nanoseconds / 1e9
@@ -652,6 +705,7 @@ class Part3(Node):
                 self.step_start_time = self.get_clock().now()
                 self.grab_step = 4
 
+        # Step 4: Wait for gripper, then lift
         elif self.grab_step == 4:
             elapsed = (self.get_clock().now() -
                        self.step_start_time).nanoseconds / 1e9
@@ -668,6 +722,7 @@ class Part3(Node):
                 self.step_start_time = self.get_clock().now()
                 self.grab_step = 5
 
+        # Step 5: Wait for lift to complete
         elif self.grab_step == 5:
             elapsed = (self.get_clock().now() -
                        self.step_start_time).nanoseconds / 1e9
@@ -678,10 +733,12 @@ class Part3(Node):
                 self.state = State.TRANSPORTING
 
     def _execute_release_sequence(self):
-        """Multi-step release sequence (from Part 2)."""
+        """Multi-step release sequence."""
 
+        # Step 0: Lower arm
         if self.release_step == 0:
-            self.get_logger().info("[RELEASE] Step 0: Lowering arm...")
+            self.get_logger().info(
+                "[RELEASE] Step 0: Lowering arm to place object...")
             lower_pos = {
                 'joint1': self.lower_joint1,
                 'joint2': self.lower_joint2,
@@ -693,22 +750,25 @@ class Part3(Node):
             self.step_start_time = self.get_clock().now()
             self.release_step = 1
 
+        # Step 1: Wait for lowering, then open gripper
         elif self.release_step == 1:
             elapsed = (self.get_clock().now() -
                        self.step_start_time).nanoseconds / 1e9
             if elapsed >= 2.5:
-                self.get_logger().info("[RELEASE] Step 1: Opening gripper...")
+                self.get_logger().info(
+                    "[RELEASE] Step 1: Opening gripper to release...")
                 self.gripper_action_future = self.send_gripper_command(
                     self.gripper_open)
                 self.step_start_time = self.get_clock().now()
                 self.release_step = 2
 
+        # Step 2: Wait for gripper, then retract arm
         elif self.release_step == 2:
             elapsed = (self.get_clock().now() -
                        self.step_start_time).nanoseconds / 1e9
             if elapsed >= 2.0:
                 self.get_logger().info(
-                    "[RELEASE] Step 2: Retracting to home...")
+                    "[RELEASE] Step 2: Retracting arm to home position...")
                 home_pos = {
                     'joint1': self.home_joint1,
                     'joint2': self.home_joint2,
@@ -720,6 +780,7 @@ class Part3(Node):
                 self.step_start_time = self.get_clock().now()
                 self.release_step = 3
 
+        # Step 3: Wait for retraction to complete
         elif self.release_step == 3:
             elapsed = (self.get_clock().now() -
                        self.step_start_time).nanoseconds / 1e9
@@ -730,7 +791,7 @@ class Part3(Node):
 
     def shutdown(self):
         """Clean shutdown."""
-        self.get_logger().info("Shutting down Part 3...")
+        self.get_logger().info("Shutting down Part 2...")
         self.stop_base()
         self.timer.cancel()
         self.teleop_pub.shutdown()

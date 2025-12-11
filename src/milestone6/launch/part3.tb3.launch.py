@@ -118,7 +118,7 @@ def generate_launch_description():
 
     audio_threshold_arg = DeclareLaunchArgument(
         'audio_threshold',
-        default_value='500',
+        default_value='800',
         description='Amplitude threshold for voice activity detection'
     )
 
