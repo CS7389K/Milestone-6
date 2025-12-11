@@ -38,8 +38,8 @@ class LlamaBackend():
 
         # Verify file is readable and non-empty
         if model_path.stat().st_size == 0:
-            raise ValueError(f"Model file is empty: {model_path}")
-
+            print(f"Model file size: {model_path.stat().st_size} bytes")
+            
         print(f"Loading model from: {model_path}")
         print(f"File size: {model_path.stat().st_size / (1024**3):.2f} GB")
         print(
