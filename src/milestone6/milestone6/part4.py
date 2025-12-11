@@ -67,9 +67,11 @@ class Part4(Part2):
     }
 
     def __init__(self):
-        # Initialize Part2 first with 'part4' node name
-        # Note: Robot base class uses node_name parameter
-        super().__init__('part4')
+        # Initialize Part2 (which initializes Robot base class)
+        super().__init__()
+
+        # Change node name from 'part2' to 'part3'
+        self._node_name = 'part4'
 
         # Override the state to Part4's initial state
         self.state = State.LLM_GUIDED
