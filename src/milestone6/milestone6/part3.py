@@ -322,14 +322,13 @@ class Part3(Node):
             self.cmd_duration = self.forward_duration
 
         elif cmd == 'scan':
-            pass
-            # self._speak("Scanning")
-            # self.scanning = True
-            # self.scan_start_angle = self.teleop_sub.joint_positions.get(
-            #     'joint1', 0.0)
-            # self.teleop_pub.set_velocity(
-            #     linear_x=0.0, angular_z=self.scan_speed)
-            # self.cmd_duration = (2 * math.pi) / self.scan_speed  # 360 degrees
+            self._speak("Scanning")
+            self.scanning = True
+            self.scan_start_angle = self.teleop_sub.joint_positions.get(
+                'joint1', 0.0)
+            self.teleop_pub.set_velocity(
+                linear_x=0.0, angular_z=self.scan_speed)
+            self.cmd_duration = (2 * math.pi) / self.scan_speed  # 360 degrees
 
         self.cmd_start_time = self.get_clock().now()
         self.state = State.EXECUTING_CMD
