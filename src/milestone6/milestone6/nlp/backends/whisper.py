@@ -5,13 +5,13 @@ class WhisperBackend():
 
     def __init__(
         self,
-        model_type: str = "base.en",
+        model: str = "base.en",
         device: str = "cpu",
         temperature: float = 0.0
     ):
         # Initialize Whisper model
         self.model = whisper.load_model(
-            model_type,
+            model,
             device=device,
             in_memory=True,
         )
