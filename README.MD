@@ -23,7 +23,7 @@ Milestone 6 integrates multiple ROS2 subsystems to create a comprehensive roboti
 
 - **Teleoperation** ([Milestone 3](https://github.com/CS7389K/Milestone-3)): Command-line interface for robot control
 - **Computer Vision** ([Milestone 4](https://github.com/CS7389K/Milestone-4)): YOLO-based object detection
-- **LLM Interaction** ([Milestone 5](https://github.com/CS7389K/Milestone-5)): LLaMA integration for natural language processing
+- **LLM Interaction** ([Milestone 5](https://github.com/CS7389K/Milestone-5)): LLaMA integration for natural language processing using [Llama-2-7B-32K-Instruct-GGUF](https://huggingface.co/TheBloke/Llama-2-7B-32K-Instruct-GGUF)
 
 The system is designed to run across multiple devices: a remote PC and a Turtlebot Jetson
 
