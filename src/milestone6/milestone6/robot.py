@@ -125,7 +125,7 @@ class Robot(Node, ABC):
     def _yolo_callback(self, data: YOLOData):
         self.debug(f"Detected tracked object: {data.clz} "
                    f"(bbox: x={data.bbox_x}, y={data.bbox_y}, "
-                   f"w={data.bbox_w}, h={data.bbox_h}, conf={data.confidence:.2f})")
+                   f"w={data.bbox_w}, h={data.bbox_h})")
 
         if data.clz not in self.tracking_classes:
             self.debug(f"Ignoring class {data.clz}, "
