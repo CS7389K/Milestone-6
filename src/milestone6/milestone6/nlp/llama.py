@@ -22,7 +22,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 
 from milestone6.nlp.backends.llama import LlamaBackend
-from milestone6.nlp.llama_prompts import SYSTEM_PROMPT
+from milestone6.nlp.prompts import SYSTEM_PROMPT
 
 class LlamaPublisher(Node):
     """ROS2 node that uses LLaMA to translate user commands to robot actions."""
