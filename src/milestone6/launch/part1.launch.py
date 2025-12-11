@@ -10,7 +10,7 @@ Part 1 Objective:
 Launches:
 - TeleopPublisher Node: Centralized teleop service for base control
 - YOLO Publisher Node: Captures camera frames and publishes bottle detections
-- TeleopBase Node: Visual servoing controller (centering only, no approach)
+- Part1 Node: Visual servoing controller (centering only, no approach)
 
 Usage:
     ros2 launch milestone6 part1.launch.py
@@ -30,9 +30,11 @@ Optional Parameters:
     
     # Visual Servoing Parameters
     tracking_classes:=<str>        Comma-separated COCO class IDs (default: '39' for bottle)
-    move_wheels:=<bool>            Enable robot movement (default: true)
+    speed:=<float>                 Linear movement speed in m/s (default: 0.15)
+    bbox_tolerance:=<int>          Bounding box width tolerance in pixels (default: 20)
     center_tolerance:=<int>        Centering tolerance in pixels (default: 30)
-    turn_speed:=<float>            Angular velocity for turning rad/s (default: 0.5)
+    target_bbox_width:=<int>       Target bounding box width for approach in pixels (default: 180)
+    turn_speed:=<float>            Angular velocity for turning rad/s (default: 1.0)
     detection_timeout:=<float>     Stop if no detection for N seconds (default: 0.5)
 
 Examples:
@@ -67,11 +69,8 @@ def generate_launch_description():
     """Generate launch description with YOLO publisher, TeleopPublisher, and TeleopBase nodes."""
     # Declare launch arguments
     launch_args = [
-        # Hardware control
         DeclareLaunchArgument('include_hardware', default_value='true',
                               description='Include hardware.launch.py'),
-
-        # YOLO configuration
         DeclareLaunchArgument('yolo_model', default_value='yolo11n.pt',
                               description='Path to YOLO model file'),
         DeclareLaunchArgument('image_width', default_value='1280',
@@ -86,15 +85,17 @@ def generate_launch_description():
                               description='Camera device ID'),
         DeclareLaunchArgument('gstreamer_pipeline', default_value='',
                               description='Custom GStreamer pipeline'),
-
-        # TeleopBase configuration
         DeclareLaunchArgument('tracking_classes', default_value='39',
                               description='Comma-separated COCO class IDs to track (39=bottle)'),
-        DeclareLaunchArgument('move_wheels', default_value='true',
-                              description='Enable robot movement'),
+        DeclareLaunchArgument('speed', default_value='0.15',
+                              description='Linear movement speed in m/s'),
+        DeclareLaunchArgument('bbox_tolerance', default_value='20',
+                              description='Bounding box width tolerance in pixels'),
         DeclareLaunchArgument('center_tolerance', default_value='30',
                               description='Centering tolerance in pixels'),
-        DeclareLaunchArgument('turn_speed', default_value='0.5',
+        DeclareLaunchArgument('target_bbox_width', default_value='180',
+                              description='Target bounding box width for approach in pixels'),
+        DeclareLaunchArgument('turn_speed', default_value='1.0',
                               description='Angular velocity in rad/s'),
         DeclareLaunchArgument('detection_timeout', default_value='0.5',
                               description='Stop if no detection for this many seconds'),
@@ -115,28 +116,7 @@ def generate_launch_description():
             'gstreamer_pipeline': LaunchConfiguration('gstreamer_pipeline'),
         }]
     )
-    # Teleop Publisher Node
-    teleop_publisher_node = Node(
-        package='milestone6',
-        executable='teleop_publisher',
-        name='teleop_publisher',
-        output='screen',
-    )
-    # TeleopBase Node (Part 1: Visual Servoing - Centering Only)
-    base_node = Node(
-        package='milestone6',
-        executable='base',
-        name='teleop_base',
-        output='screen',
-        parameters=[{
-            'tracking_classes': LaunchConfiguration('tracking_classes'),
-            'image_width': LaunchConfiguration('image_width'),
-            'move_wheels': LaunchConfiguration('move_wheels'),
-            'center_tolerance': LaunchConfiguration('center_tolerance'),
-            'turn_speed': LaunchConfiguration('turn_speed'),
-            'detection_timeout': LaunchConfiguration('detection_timeout'),
-        }]
-    )
+
     # Hardware Launch (conditional)
     hardware_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
@@ -149,6 +129,33 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('include_hardware'))
     )
 
+    # Teleop Publisher Node
+    teleop_publisher_node = Node(
+        package='milestone6',
+        executable='teleop_publisher',
+        name='teleop_publisher',
+        output='screen',
+    )
+
+    # Part1 Node (Visual Servoing - Centering Only)
+    part1_node = Node(
+        package='milestone6',
+        executable='part1',
+        name='part1',
+        output='screen',
+        parameters=[{
+            'image_width': LaunchConfiguration('image_width'),
+            'image_height': LaunchConfiguration('image_height'),
+            'speed': LaunchConfiguration('speed'),
+            'turn_speed': LaunchConfiguration('turn_speed'),
+            'tracking_classes': LaunchConfiguration('tracking_classes'),
+            'bbox_tolerance': LaunchConfiguration('bbox_tolerance'),
+            'center_tolerance': LaunchConfiguration('center_tolerance'),
+            'target_bbox_width': LaunchConfiguration('target_bbox_width'),
+            'detection_timeout': LaunchConfiguration('detection_timeout'),
+        }]
+    )
+
     return LaunchDescription([
         # Launch arguments
         *launch_args,
@@ -157,5 +164,5 @@ def generate_launch_description():
         # Nodes
         teleop_publisher_node,
         yolo_publisher_node,
-        base_node,
+        part1_node,
     ])
