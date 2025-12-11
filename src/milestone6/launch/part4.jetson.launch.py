@@ -59,7 +59,7 @@ from milestone6.util.launch import LaunchArg
 LAUNCH_ARGS = {
     'model_path': ('', 'Path to LLaMA model (empty=use default from LlamaBackend)'),
     'instruct': ('true', 'Use instruct model variant'),
-    'n_ctx': ('512', 'Context window size'),
+    'n_ctx': ('750', 'Context window size'),
     'n_threads': ('4', 'Number of CPU threads'),
     'n_gpu_layers': ('33', 'Number of GPU layers to offload'),
     'temperature': ('0.7', 'Sampling temperature (lower=more deterministic)'),
