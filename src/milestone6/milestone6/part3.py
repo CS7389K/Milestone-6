@@ -288,6 +288,7 @@ class Part3(Part2):
 
         # ==================== RELEASING (Part 2) ====================
         elif self.state == State.RELEASING:
+            self._speak("Throwing bottle down flight of stairs")
             self.execute_release_sequence(next_state=State.DONE)
 
         # ==================== DONE ====================
