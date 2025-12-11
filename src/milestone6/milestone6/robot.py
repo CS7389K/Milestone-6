@@ -9,9 +9,9 @@ from rclpy.node import Node
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 from milestone6.teleop.publisher import TeleopPublisher
+from milestone6.util.coco import COCO_CLASSES
 from milestone6.yolo.subscriber import YOLOSubscriber
 from milestone6.yolo.yolo_data import YOLOData
-from milestone6.util.coco import COCO_CLASSES
 
 
 class Robot(Node, ABC):
@@ -56,15 +56,14 @@ class Robot(Node, ABC):
         'detection_timeout': 0.5,       # seconds
     }
 
-    @classmethod
-    def _get_merged_params(cls):
+    def _get_merged_params(self):
         """
         Merge parameters from all parent classes in MRO order.
         Child class parameters override parent class parameters.
         """
         merged = {}
         # Traverse in reverse MRO order (from base to derived)
-        for base_class in reversed(cls.__mro__):
+        for base_class in reversed(self.__class__.__mro__):
             if hasattr(base_class, 'PARAMETERS') and base_class.PARAMETERS is not None:
                 merged.update(base_class.PARAMETERS)
         return merged
