@@ -233,8 +233,10 @@ class Part4(Part2):
                 # Initialize search
                 self.search_initial_yaw = None
                 self.search_object_found = False
+                # Clear current action and transition to SEARCHING
+                self.current_action = None
+                self.action_start_time = None
                 self.state = State.SEARCHING
-                # Don't call _finish_action() - we want to stay in SEARCHING state
             else:
                 self._finish_action()
 
