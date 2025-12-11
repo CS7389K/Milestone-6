@@ -106,6 +106,9 @@ class LlamaPublisher(Node):
                 stream=True
             )
 
+            # Log the full response for debugging
+            self.get_logger().info(f"LLM raw response: {repr(response)}")
+
             # Extract atomic action from response
             action = self._extract_action(response)
 
@@ -145,30 +148,40 @@ class LlamaPublisher(Node):
         # Clean up response
         response = response.strip()
 
-        # Valid atomic actions
-        valid_actions = [
-            'TURN_LEFT', 'TURN_RIGHT', 'MOVE_FORWARD', 'SCAN',
-            'SEARCH', 'GRAB', 'TRANSPORT_TO', 'PLACE', 'DONE'
-        ]
+        # Log the raw response for debugging
+        self.get_logger().debug(f"Raw LLM response: {repr(response)}")
 
-        # Check for actions with parameters (SEARCH, TRANSPORT_TO)
-        for line in response.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
+        # Try to find action anywhere in the response (not just at start of line)
+        response_upper = response.upper()
 
-            # Check for exact matches or parameterized actions
-            for action in valid_actions:
-                if line.upper().startswith(action):
-                    return line.upper()
+        # First, try to find parameterized actions (they need special handling)
+        if 'SEARCH' in response_upper:
+            # Extract SEARCH <object> pattern
+            import re
+            match = re.search(r'SEARCH\s+(\w+)', response_upper)
+            if match:
+                return f"SEARCH {match.group(1)}"
+            else:
+                return "SEARCH"
 
-        # If no valid action found, return the first non-empty line
-        # This allows flexibility in LLM output format
-        for line in response.split('\n'):
-            line = line.strip()
-            if line:
-                return line.upper()
+        if 'TRANSPORT_TO' in response_upper:
+            # Extract TRANSPORT_TO <object> pattern
+            import re
+            match = re.search(r'TRANSPORT_TO\s+(\w+)', response_upper)
+            if match:
+                return f"TRANSPORT_TO {match.group(1)}"
+            else:
+                return "TRANSPORT_TO"
 
+        # Check for simple actions (order matters - check longer ones first)
+        for action in ['MOVE_FORWARD', 'TURN_LEFT', 'TURN_RIGHT', 'SCAN',
+                       'GRAB', 'PLACE', 'DONE']:
+            if action in response_upper:
+                return action
+
+        # If no valid action found, log and return empty
+        self.get_logger().warn(
+            f"No valid action found in response: {repr(response)}")
         return ""
 
 

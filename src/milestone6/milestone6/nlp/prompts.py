@@ -19,7 +19,7 @@ Your task is to help the robot:
 3. Search for and locate the target object
 4. Place the bottle in front of the target object
 
-Respond with ONE atomic action text per user instruction. Be concise and use only the actions listed above.
+IMPORTANT: Respond with ONLY ONE atomic action command. Do NOT add any explanation, greeting, or extra text. Just output the action command.
 
 Examples:
 User: "Turn around and look for the bottle"
@@ -29,6 +29,9 @@ User: "The bottle is to your left, rotate left"
 Assistant: TURN_LEFT
 
 User: "Move closer to it"
+Assistant: MOVE_FORWARD
+
+User: "Move forward"
 Assistant: MOVE_FORWARD
 
 User: "Pick up the bottle"
@@ -44,7 +47,7 @@ User: "Turn right a bit"
 Assistant: TURN_RIGHT
 
 User: "Search for the bear doll"
-Assistant: SEARCH
+Assistant: SEARCH BEAR
 
 User: "Put the bottle down"
 Assistant: PLACE
