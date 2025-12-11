@@ -175,18 +175,18 @@ ros2 launch milestone6 part4.tb3.launch.py
 python3 src/milestone6/milestone6/nlp/cli.py
 
 # Or publish to /user_command topic:
-ros2 topic pub /user_command std_msgs/String "data: 'Search for the bottle'"
+ros2 topic pub /user_command std_msgs/String "data: 'search for the bottle'"
 ```
 
 **Nodes**:
 - *Remote PC*: LLaMA Publisher, Espeak Subscriber
 - *TurtleBot*: Hardware bringup, YOLO Publisher, Part4 Mission
 
-**Example Commands**:
-- "Scan the room for the bottle" → Robot rotates 360° looking for bottle
-- "Pick up the bottle" → Robot executes grab sequence
-- "Go to the bear" → Robot navigates toward bear object
-- "We are done" → Mission complete
+**Example Commands** (use lowercase):
+- "scan the room for the bottle" → Robot rotates 360° looking for bottle
+- "pick up the bottle" → Robot executes grab sequence
+- "go to the bear" → Robot navigates toward bear object
+- "we are done" → Mission complete
 
 **Parameters**: See [part4.jetson.launch.py](src/milestone6/launch/part4.jetson.launch.py) and [part4.tb3.launch.py](src/milestone6/launch/part4.tb3.launch.py)
 
