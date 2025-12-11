@@ -94,166 +94,109 @@ After building the project, source the workspace in each terminal session:
 source install/setup.sh
 ```
 
+## Nodes
+
+The system consists of the following ROS2 nodes:
+
+### Mission Control Nodes
+- **Part1** (`part1`) - Visual servoing controller that centers the robot on detected bottles
+- **Part2** (`part2`) - Autonomous grab and transport mission with state machine (IDLE → CENTERING → APPROACHING → GRABBING → TRANSPORTING → RELEASING → DONE)
+- **Part3** - Voice-guided search extending Part2 with speech commands (turn, move, scan)
+- **Part4** - LLM-guided mission extending Part2 with natural language commands via LLaMA
+
+### Perception & Control Nodes
+- **YOLOPublisher** (`yolo_publisher`) - Object detection using YOLO, publishes bounding box data to `/yolo_detections`
+- **TeleopPublisher** - Centralized teleop service for base movement, arm control, and gripper commands
+
+### Natural Language Processing Nodes
+- **WhisperPublisher** (`whisper_publisher`) - Speech-to-text transcription, publishes to `/voice_transcription`
+- **EspeakSubscriber** (`espeak_subscriber`) - Text-to-speech output, subscribes to `/text_to_speech`
+- **LlamaPublisher** (`llama_publisher`) - Translates natural language to atomic robot actions, subscribes to `/user_command` and publishes to `/llm_action`
+
+### Utility Nodes
+- **CommandSender** (`command_sender`) - Interactive CLI for sending commands to `/user_command`
+
+## Launch Configurations
+
 ### Part 1: Visual Servoing for Bottle Tracking
 
-**Objective**: Implement visual servoing that continuously tracks a bottle by rotating the robot to keep it centered in the camera frame.
+Visual servoing that tracks a bottle by keeping it centered in the camera frame.
 
 ```sh
-# On TurtleBot (includes hardware bringup by default):
 ros2 launch milestone6 part1.launch.py
-
-# Without hardware bringup:
-ros2 launch milestone6 part1.launch.py include_hardware:=false
 ```
 
-**What it launches**:
-- Hardware bringup (unless include_hardware:=false)
-- TeleopPublisher Node: Centralized teleop service for base control
-- YOLO Publisher Node: Captures camera frames and publishes bottle detections
-- Part1 Node: Visual servoing controller (centering only, no approach)
+**Nodes**: Hardware bringup, TeleopPublisher, YOLO Publisher, Part1 Controller
 
-### Part 2: Complete Object Grab and Transport Mission
+**Parameters**: See [part1.launch.py](src/milestone6/launch/part1.launch.py)
 
-**Objective**: Complete autonomous grab and transport sequence with mission states: IDLE → CENTERING → APPROACHING → GRABBING → TRANSPORTING → RELEASING → DONE
+### Part 2: Autonomous Grab & Transport
+
+Complete autonomous sequence to grab and transport an object.
 
 ```sh
-# On TurtleBot (includes hardware bringup by default):
 ros2 launch milestone6 part2.launch.py
-
-# Without hardware bringup:
-ros2 launch milestone6 part2.launch.py include_hardware:=false
 ```
 
-**What it launches**:
-- Hardware bringup (unless include_hardware:=false)
-- YOLO Publisher Node: Object detection using camera
-- Part 2 Mission Node: Complete autonomous grab and transport sequence
+**Nodes**: Hardware bringup, YOLO Publisher, Part2 Mission
 
-### Part 3: Voice-Guided Object Search
+**Parameters**: See [part2.launch.py](src/milestone6/launch/part2.launch.py)
 
-**Objective**: Voice-controlled robot search with speech-to-text (Whisper) and text-to-speech (Espeak) capabilities.
+### Part 3: Voice-Guided Search
+
+Voice-controlled robot search with speech-to-text and text-to-speech.
 
 ```sh
-# On Remote PC (Whisper + Espeak):
+# On Remote PC:
 ros2 launch milestone6 part3.jetson.launch.py
 
-# On TurtleBot (Hardware + YOLO + Mission):
+# On TurtleBot:
 ros2 launch milestone6 part3.tb3.launch.py
 ```
 
-**What it launches**:
+**Nodes**:
+- *Remote PC*: Whisper Publisher, Espeak Subscriber
+- *TurtleBot*: Hardware bringup, YOLO Publisher, Part3 Mission
 
-*Remote PC (part3.jetson.launch.py)*:
-- Whisper Publisher: Speech-to-text transcription service
-- Espeak Subscriber: Text-to-speech output service
+**Parameters**: See [part3.jetson.launch.py](src/milestone6/launch/part3.jetson.launch.py) and [part3.tb3.launch.py](src/milestone6/launch/part3.tb3.launch.py)
 
-*TurtleBot (part3.tb3.launch.py)*:
-- Hardware bringup (unless include_hardware:=false)
-- YOLO Publisher: Object detection
-- Part 3 Mission Node: Voice-guided search with audio recording
+### Part 4: LLM-Guided Navigation
 
-### Part 4: LLM-Guided Search and Retrieval
-
-**Objective**: Natural language command interface using LLaMA to translate user commands into atomic robot actions.
+Natural language command interface using LLaMA to control the robot.
 
 ```sh
-# On Remote PC (LLaMA + Espeak):
+# On Remote PC:
 ros2 launch milestone6 part4.jetson.launch.py
 
-# On TurtleBot (Hardware + YOLO + Mission):
+# On TurtleBot:
 ros2 launch milestone6 part4.tb3.launch.py
 
-# Send commands using the interactive CLI (recommended):
+# Send commands using the interactive CLI:
 python3 src/milestone6/milestone6/nlp/cli.py
 
-# Or send individual commands from another terminal using topics:
-ros2 topic pub /user_command std_msgs/String "data: 'Scan for the bottle'"
-ros2 topic pub /user_command std_msgs/String "data: 'Turn left'"
-ros2 topic pub /user_command std_msgs/String "data: 'Move forward'"
-ros2 topic pub /user_command std_msgs/String "data: 'Pick up the bottle'"
-ros2 topic pub /user_command std_msgs/String "data: 'Go to the bear which is 2 meters ahead'"
-ros2 topic pub /user_command std_msgs/String "data: 'Search for the bear'"
-ros2 topic pub /user_command std_msgs/String "data: 'Place the bottle'"
-ros2 topic pub /user_command std_msgs/String "data: 'We are done'"
+# Or publish to /user_command topic:
+ros2 topic pub /user_command std_msgs/String "data: 'Search for the bottle'"
 ```
 
-**What it launches**:
+**Nodes**:
+- *Remote PC*: LLaMA Publisher, Espeak Subscriber
+- *TurtleBot*: Hardware bringup, YOLO Publisher, Part4 Mission
 
-*Remote PC (part4.jetson.launch.py)*:
-- LLaMA Publisher: Translates user text to atomic robot actions
-- Espeak Subscriber: Text-to-speech output service
+**Example Commands**:
+- "Scan the room for the bottle" → Robot rotates 360° looking for bottle
+- "Pick up the bottle" → Robot executes grab sequence
+- "Go to the bear" → Robot navigates toward bear object
+- "We are done" → Mission complete
 
-*TurtleBot (part4.tb3.launch.py)*:
-- Hardware bringup (unless include_hardware:=false)
-- YOLO Publisher: Multi-object detection (bottle, bear, mouse)
-- Part 4 Mission Node: LLM-guided search and retrieval
+**Parameters**: See [part4.jetson.launch.py](src/milestone6/launch/part4.jetson.launch.py) and [part4.tb3.launch.py](src/milestone6/launch/part4.tb3.launch.py)
 
-**Sample Natural Language Prompts**:
+## Launch Parameters
 
-The LLaMA model translates natural language into atomic robot actions. Here are example prompts you can use:
+All parts support common parameters like `include_hardware:=false`, `yolo_model:=<path>`, `display:=<bool>`, `speed:=<float>`, etc. See individual launch files in [src/milestone6/launch/](src/milestone6/launch/) for complete parameter lists and defaults.
 
-*Exploration & Search:*
-- "Scan the room for the bottle"
-- "Look around and find the bear"
-- "Turn 360 degrees to search"
-- "Rotate left slowly"
-- "Turn right and look for objects"
-
-*Movement:*
-- "Move forward"
-- "Go straight for a bit"
-- "Back up slowly"
-- "Stop moving"
-
-*Object Manipulation:*
-- "Pick up the bottle"
-- "Grab the object in front of you"
-- "Place the bottle down"
-- "Release what you're holding"
-
-*Navigation:*
-- "Go to the bear"
-- "Navigate to the mouse which is 2 meters ahead"
-- "Move toward the bear on your left"
-
-*Combined Tasks:*
-- "Find the bottle, pick it up, and bring it to the bear"
-- "Search for the mouse and grab it"
-- "Go to the bear and place the bottle there"
-
-*Mission Control:*
-- "We are done"
-- "Mission complete"
-- "Stop and finish"
-
-## Common Launch Parameters
-
-All launch files support various parameters to customize behavior. Here are some common ones:
-
-### YOLO Detection Parameters
-- `yolo_model:=<path>` - Path to YOLO model file (default: yolo11n.pt)
-- `image_width:=<int>` - Camera image width in pixels (default: 1280)
-- `image_height:=<int>` - Camera image height in pixels (default: 720)
-- `display:=<bool>` - Display YOLO detection window (default: true)
-- `tracking_classes:=<str>` - Comma-separated COCO class IDs (default varies by part)
-
-### Camera Parameters
-- `camera_backend:=<str>` - Camera backend: gstreamer or opencv (default: gstreamer)
-- `camera_device:=<int>` - Camera device ID (default: 1)
-- `gstreamer_pipeline:=<str>` - Custom GStreamer pipeline (default: '')
-
-### Motion Parameters
-- `speed:=<float>` - Linear movement speed in m/s (default: 0.05)
-- `turn_speed:=<float>` - Angular velocity for turning rad/s (default: 0.25)
-- `center_tolerance:=<int>` - Centering tolerance in pixels (default: 30)
-- `target_bbox_width:=<int>` - Target bounding box width in pixels (default: 365)
-
-### Hardware
-- `include_hardware:=<bool>` - Include hardware.launch.py (default: true)
-
-Example usage:
+**Example**:
 ```sh
-ros2 launch milestone6 part1.launch.py yolo_model:=yolo11s.pt display:=false speed:=0.1
+ros2 launch milestone6 part1.launch.py include_hardware:=false display:=false speed:=0.1
 ```
 
 ## Resources
