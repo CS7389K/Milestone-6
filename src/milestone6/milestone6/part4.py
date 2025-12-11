@@ -59,7 +59,7 @@ class Part4(Part2):
 
     # Override and extend Part2 parameters
     PARAMETERS = {
-        'tracking_classes': '39,73,64', # bottle, bear, mouse
+        'tracking_classes': '39,77,64', # bottle, bear, mouse
         'turn_duration': 1.0,           # seconds
         'forward_duration': 0.5,        # seconds
         'scan_speed': 0.5,              # rad/s
