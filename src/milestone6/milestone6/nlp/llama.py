@@ -41,7 +41,7 @@ class LlamaPublisher(Node):
         self.declare_parameter('n_gpu_layers', 33)
         self.declare_parameter('temperature', 0.1)
         self.declare_parameter('top_p', 0.95)
-        self.declare_parameter('max_tokens', 64)
+        self.declare_parameter('max_tokens', 32)
 
         # Get parameters
         model_path = self.get_parameter('model_path').value
@@ -105,7 +105,7 @@ class LlamaPublisher(Node):
                 temperature=self.temperature,
                 top_p=self.top_p,
                 stream=True,
-                stop=["\n\n", "User:", "[/INST]", "</s>", "[INST]"]
+                stop=["\n", "\n\n", "User:", "[/INST]", "</s>", "[INST]", "1.", "2.", "-", "  "]
             )
 
             # Log the full response for debugging

@@ -1,15 +1,6 @@
-SYSTEM_PROMPT = """Translate commands to robot actions. Output ONLY the action, no explanation.
+SYSTEM_PROMPT = """Translate the command to ONE robot action. Output ONLY ONE action word, nothing else.
 
-Actions:
-- TURN_LEFT
-- TURN_RIGHT  
-- MOVE_FORWARD
-- SCAN
-- SEARCH <object>
-- GRAB
-- TRANSPORT_TO <object>
-- PLACE
-- DONE
+Actions: TURN_LEFT, TURN_RIGHT, MOVE_FORWARD, SCAN, SEARCH <object>, GRAB, TRANSPORT_TO <object>, PLACE, DONE
 
 Examples:
 "Turn left" -> TURN_LEFT
@@ -18,6 +9,6 @@ Examples:
 "Pickup the bottle" -> GRAB
 "Search for bear" -> SEARCH BEAR
 "Put it down" -> PLACE
-"Transport to mouse" -> TRANSPORT_TO MOUSE
-"Scan around" -> SCAN
-"Done" -> DONE"""
+"Done" -> DONE
+
+Output format: Just the action, no numbers, no lists, no explanations."""

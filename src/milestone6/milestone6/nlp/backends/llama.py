@@ -65,7 +65,7 @@ class LlamaBackend():
         stop: list = None
     ) -> str:
         if stop is None:
-            stop = ["\n\n", "User:", "[/INST]", "</s>", "[INST]"]
+            stop = ["\n", "\n\n", "User:", "[/INST]", "</s>", "[INST]", "1.", "2.", "-", "  "]
 
         chunks = self.llm(
             prompt,
