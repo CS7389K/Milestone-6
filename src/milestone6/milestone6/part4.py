@@ -48,7 +48,8 @@ class State(Enum):
     TRANSPORTING = 5     # Moving with object (LLM-guided)
     SEARCHING_TARGET = 6  # Searching for placement target
     PLACING = 7          # Placing object sequence
-    DONE = 8             # Complete
+    SEARCHING = 8        # Spinning to search for specific object
+    DONE = 9             # Complete
 
 
 class Part4(Part2):
@@ -88,6 +89,11 @@ class Part4(Part2):
         self.current_target = None      # 'bottle', 'bear', or 'mouse'
         self.held_object = None         # Track if holding bottle
         self.placement_target = None    # Target object for placement
+
+        # Search state
+        self.search_initial_yaw = None
+        self.search_target = None
+        self.search_object_found = False
 
         # ------------------- LLM Communication -------------------
         # LLM action subscriber
@@ -217,12 +223,17 @@ class Part4(Part2):
             target = self._parse_search_target(action)
             if target:
                 self.current_target = target
+                self.search_target = target
                 # Update tracking_classes by modifying the parameter
                 # Note: tracking_classes is already a list in Robot base class
                 self.tracking_classes = [self._get_class_id_for_object(target)]
                 self._speak(f"Searching for {target}")
                 self.info(
                     f"Searching for {target} (class {self.tracking_classes[0]})")
+                # Initialize search
+                self.search_initial_yaw = None
+                self.search_object_found = False
+                self.state = State.SEARCHING
             self._finish_action()
 
         elif action == 'GRAB':
@@ -285,6 +296,43 @@ class Part4(Part2):
             self.initial_yaw = None
             self._speak("Scan complete")
             self._finish_action()
+        else:
+            # Continue rotating
+            self.teleop_publisher.set_velocity(0.0, self.scan_speed)
+
+    def _execute_search(self):
+        """Execute search by spinning until object found or 360° complete."""
+        # Check if object has been found during search
+        if self.detection_is_fresh() and not self.search_object_found:
+            # Object found!
+            self.stop_movement()
+            self.search_object_found = True
+            self._speak("Found you")
+            self.info(f"Found {self.search_target}!")
+            self.state = State.LLM_GUIDED
+            self.search_initial_yaw = None
+            return
+
+        # Initialize search if needed
+        if self.search_initial_yaw is None:
+            self.search_initial_yaw = self.teleop_subscriber.yaw
+            self.info(
+                f"Starting search from yaw: {self.search_initial_yaw:.2f}")
+
+        current_yaw = self.teleop_subscriber.yaw
+
+        # Calculate how far we've rotated
+        yaw_diff = abs(current_yaw - self.search_initial_yaw)
+        if yaw_diff > math.pi:
+            yaw_diff = 2 * math.pi - yaw_diff
+
+        if yaw_diff >= 2 * math.pi - 0.2:  # Nearly complete 360° rotation
+            # Completed full rotation without finding object
+            self.stop_movement()
+            self._speak(f"Could not find {self.search_target}")
+            self.info(f"Search complete - {self.search_target} not found")
+            self.state = State.LLM_GUIDED
+            self.search_initial_yaw = None
         else:
             # Continue rotating
             self.teleop_publisher.set_velocity(0.0, self.scan_speed)
@@ -373,6 +421,10 @@ class Part4(Part2):
         elif self.state == State.PLACING:
             # Use Part2's execute_release_sequence with next_state parameter
             self.execute_release_sequence(next_state=State.DONE)
+
+        elif self.state == State.SEARCHING:
+            # Execute search by spinning and looking for target
+            self._execute_search()
 
         elif self.state == State.DONE:
             self.stop_movement()
