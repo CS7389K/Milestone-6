@@ -131,7 +131,7 @@ def generate_launch_description():
         executable='part2',
         name='part2',
         output='screen',
-        parameters=[{
+        parameters=[
             LaunchArg.generate_launch_configs([
                 'image_width',
                 'image_height',
@@ -162,7 +162,7 @@ def generate_launch_description():
                 'gripper_open',
                 'gripper_close',
             ])
-        }]
+        ]
     )
 
     return LaunchDescription([
