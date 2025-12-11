@@ -62,8 +62,7 @@ Optional Parameters:
 from launch_ros.actions import Node
 
 from launch import LaunchDescription
-
-from .util import HARDWARE_LAUNCH, LaunchArg
+from milestone6.util.launch import HARDWARE_LAUNCH, LaunchArg
 
 LAUNCH_ARGS = {
     'include_hardware': ('true', 'Include hardware.launch.py'),

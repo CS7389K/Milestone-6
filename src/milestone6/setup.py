@@ -9,6 +9,7 @@ setup(
     version='0.0.0',
     packages=[
         package_name,
+        f'{package_name}.launch',
         f'{package_name}.nlp',
         f'{package_name}.nlp.backends',
         f'{package_name}.teleop',

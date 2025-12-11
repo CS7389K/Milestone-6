@@ -34,10 +34,10 @@ Optional Parameters:
 """
 
 
-from launch import LaunchDescription
 from launch_ros.actions import Node
 
-from .util import HARDWARE_LAUNCH, LaunchArg
+from launch import LaunchDescription
+from milestone6.util.launch import HARDWARE_LAUNCH, LaunchArg
 
 LAUNCH_ARGS = {
     'include_hardware': ('true', 'Include hardware.launch.py'),

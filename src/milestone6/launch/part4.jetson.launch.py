@@ -62,10 +62,11 @@ Examples:
     ros2 launch milestone6 part4.jetson.launch.py speech_rate:=160
 """
 
-from launch import LaunchDescription
+from launch_ros.actions import Node
+
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
+from launch import LaunchDescription
 
 
 def generate_launch_description():
