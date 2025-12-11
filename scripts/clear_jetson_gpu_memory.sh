@@ -22,9 +22,10 @@ show_gpu_memory() {
         timeout 1s tegrastats 2>/dev/null | head -n 1 || true
     fi
     
-    # Also show nvidia-smi if available
-    if command -v nvidia-smi &> /dev/null; then
-        nvidia-smi --query-gpu=memory.used,memory.free,memory.total --format=csv,noheader,nounits
+    # Show memory from /proc if available
+    if [ -f /proc/meminfo ]; then
+        echo "System Memory:"
+        grep -E "MemTotal|MemFree|MemAvailable" /proc/meminfo
     fi
     echo ""
 }
@@ -64,17 +65,9 @@ pkill -9 -f "python.*model" 2>/dev/null || true
 echo ""
 echo "Attempting to reset GPU state..."
 
-# For Jetson, we can try to reload the nvidia drivers
+# For Jetson, clear nvmap (memory allocator) state
 if [ -f /sys/kernel/debug/nvmap/iovmm/clients ]; then
     sudo bash -c 'echo 1 > /sys/kernel/debug/nvmap/iovmm/procrank' 2>/dev/null || true
-fi
-
-# Alternative: Use nvidia-smi to reset GPU applications (if available)
-if command -v nvidia-smi &> /dev/null; then
-    echo "Resetting GPU using nvidia-smi..."
-    sudo nvidia-smi --gpu-reset 2>/dev/null || \
-    sudo nvidia-smi --reboot-type=soft 2>/dev/null || \
-    echo "GPU reset not supported by nvidia-smi on this device"
 fi
 
 # Step 4: Clear system cache to free up memory
