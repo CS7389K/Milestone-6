@@ -65,7 +65,6 @@ class Part3(Node):
         self.declare_parameter('forward_duration', 0.5)     # seconds
         self.declare_parameter('scan_speed', 0.5)           # rad/s
         # rad/s for voice cmds
-        self.declare_parameter('turn_speed_voice', 1.0)
         self.declare_parameter('forward_speed_voice', 0.2)  # m/s
         self.declare_parameter('audio_file', '/tmp/voice_input.wav')
         # seconds between prompts
@@ -114,7 +113,6 @@ class Part3(Node):
         self.turn_duration = self.get_parameter('turn_duration').value
         self.forward_duration = self.get_parameter('forward_duration').value
         self.scan_speed = self.get_parameter('scan_speed').value
-        self.turn_speed_voice = self.get_parameter('turn_speed_voice').value
         self.forward_speed_voice = self.get_parameter(
             'forward_speed_voice').value
         self.audio_file = self.get_parameter('audio_file').value
@@ -308,13 +306,13 @@ class Part3(Node):
         if cmd == 'turn_right':
             self._speak("Turning right")
             self.teleop_pub.set_velocity(
-                linear_x=0.0, angular_z=-self.turn_speed_voice)
+                linear_x=0.0, angular_z=-self.turn_speed)
             self.cmd_duration = self.turn_duration
 
         elif cmd == 'turn_left':
             self._speak("Turning left")
             self.teleop_pub.set_velocity(
-                linear_x=0.0, angular_z=self.turn_speed_voice)
+                linear_x=0.0, angular_z=self.turn_speed)
             self.cmd_duration = self.turn_duration
 
         elif cmd == 'forward':
@@ -510,10 +508,10 @@ class Part3(Node):
             'joint4': joint4
         }
 
-
     # ------------------------------------------------------------------
     # State Machine
     # ------------------------------------------------------------------
+
     def tick(self):
         """Main state machine tick (10 Hz)."""
 
@@ -539,8 +537,7 @@ class Part3(Node):
                 if cmd != 'unknown':
                     self._execute_voice_command(cmd)
                 else:
-                    self._speak(
-                        "Command not recognized. Try turn left, turn right, move forward, or scan.")
+                    self._speak("Command not recognized.")
 
             # Prompt for voice command periodically (visual feedback only)
             now = self.get_clock().now()

@@ -86,12 +86,6 @@ def generate_launch_description():
         description='Rotation speed for scan command in rad/s'
     )
 
-    turn_speed_voice_arg = DeclareLaunchArgument(
-        'turn_speed_voice',
-        default_value='1.0',
-        description='Angular velocity for voice turn commands in rad/s'
-    )
-
     forward_speed_voice_arg = DeclareLaunchArgument(
         'forward_speed_voice',
         default_value='0.2',
@@ -192,7 +186,6 @@ def generate_launch_description():
             'turn_duration': LaunchConfiguration('turn_duration'),
             'forward_duration': LaunchConfiguration('forward_duration'),
             'scan_speed': LaunchConfiguration('scan_speed'),
-            'turn_speed_voice': LaunchConfiguration('turn_speed_voice'),
             'forward_speed_voice': LaunchConfiguration('forward_speed_voice'),
             'audio_file': LaunchConfiguration('audio_file'),
             'prompt_delay': 30.0,
@@ -243,7 +236,6 @@ def generate_launch_description():
         turn_duration_arg,
         forward_duration_arg,
         scan_speed_arg,
-        turn_speed_voice_arg,
         forward_speed_voice_arg,
         audio_file_arg,
         audio_duration_arg,
