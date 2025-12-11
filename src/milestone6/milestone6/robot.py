@@ -47,13 +47,13 @@ class Robot(Node, ABC):
     PARAMETERS = {
         'image_width': 1280,            # pixels
         'image_height': 720,            # pixels
-        'speed': 0.15,                  # m/s
-        'turn_speed': 1.0,              # rad/s
+        'speed': 0.05,                  # m/s
+        'turn_speed': 0.25,              # rad/s
         'tracking_classes': '39',       # Comma-separated COCO class IDs
         'bbox_tolerance': 20,           # pixels
         'center_tolerance': 30,         # pixels
-        'target_bbox_width': 180,       # pixels
-        'detection_timeout': 0.5,       # seconds
+        'target_bbox_width': 365,       # pixels
+        'detection_timeout': 1.0,       # seconds
     }
 
     def _get_merged_params(self):
@@ -80,8 +80,11 @@ class Robot(Node, ABC):
         self.params = self._get_merged_params()
         for param_name, default_value in self.params.items():
             self.declare_parameter(param_name, default_value)
+
         for param_name in self.params.keys():
-            self.__setattr__(param_name, self.get_parameter(param_name).value)
+            p = self.get_parameter(param_name).value
+            self.__setattr__(param_name, p)
+            self.params[param_name] = p
 
         # Track when we last saw the target object
         self.last_detection_time = None
@@ -98,14 +101,13 @@ class Robot(Node, ABC):
         self.class_names = [COCO_CLASSES.get(cls, f'unknown({cls})')
                             for cls in self.tracking_classes]
 
-        self.info(f"Tracking COCO classes: {', '.join(self.class_names)}")
-
         # Initialize teleop publisher (handles all movement commands)
         self.info("Starting Teleop Publisher...")
         self.teleop_publisher = TeleopPublisher(self)
 
         # Initialize YOLO subscriber (receives detection results)
         self.info("Starting YOLO Subscriber...")
+        self.info(f"Tracking COCO classes: {', '.join(self.class_names)}")
         self.yolo_subscriber = YOLOSubscriber(self, self._yolo_callback)
 
         # Create timer for main control loop
@@ -311,7 +313,7 @@ class Robot(Node, ABC):
         bbox_error = abs(yolo_data.bbox_w - self.target_bbox_width)
         return bbox_error <= self.bbox_tolerance
 
-    # ----------------------------------- Robot ---------------------------------- #
+    # ----------------------------------- ROS2 ----------------------------------- #
     def shutdown(self):
         """Clean shutdown."""
         self.get_logger().info(f"Shutting down node {self.get_name()}...")

@@ -26,9 +26,9 @@ class Part1(Robot):
 
     def __init__(self):
         super().__init__('part1')
+        self._is_moving = False
         self.info("Initialized Part 1: Visual Servoing (Centering Only).")
         self.info(f"Parameters: {self.params}")
-        self._is_moving = False
 
     def _tick(self):
         """Main control loop - center on object if detected."""

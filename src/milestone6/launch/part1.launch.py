@@ -25,87 +25,61 @@ Optional Parameters:
     camera_device:=<int>           Camera device ID (default: 1)
     gstreamer_pipeline:=<str>      Custom GStreamer pipeline (default: '')
     tracking_classes:=<str>        Comma-separated COCO class IDs (default: '39' for bottle)
-    speed:=<float>                 Linear movement speed in m/s (default: 0.15)
+    speed:=<float>                 Linear movement speed in m/s (default: 0.05)
     bbox_tolerance:=<int>          Bounding box width tolerance in pixels (default: 20)
     center_tolerance:=<int>        Centering tolerance in pixels (default: 30)
-    target_bbox_width:=<int>       Target bounding box width for approach in pixels (default: 180)
-    turn_speed:=<float>            Angular velocity for turning rad/s (default: 1.0)
-    detection_timeout:=<float>     Stop if no detection for N seconds (default: 0.5)
+    target_bbox_width:=<int>       Target bounding box width for approach in pixels (default: 365)
+    turn_speed:=<float>            Angular velocity for turning rad/s (default: 0.25)
+    detection_timeout:=<float>     Stop if no detection for N seconds (default: 1.0)
 """
 
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import IfCondition
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackageShare
+
+from .util import HARDWARE_LAUNCH, LaunchArg
+
+LAUNCH_ARGS = {
+    'include_hardware': ('true', 'Include hardware.launch.py'),
+    'yolo_model': ('yolo11n.pt', 'Path to YOLO model file'),
+    'image_width': ('1280', 'Camera image width in pixels'),
+    'image_height': ('720', 'Camera image height in pixels'),
+    'display': ('true', 'Display YOLO detection window'),
+    'camera_backend': ('gstreamer', 'Camera backend (gstreamer, opencv)'),
+    'camera_device': ('1', 'Camera device ID'),
+    'gstreamer_pipeline': ('', 'Custom GStreamer pipeline'),
+    'tracking_classes': ('39', 'Comma-separated COCO class IDs to track (39=bottle)'),
+    'speed': ('0.05', 'Linear movement speed in m/s'),
+    'bbox_tolerance': ('20', 'Bounding box width tolerance in pixels'),
+    'center_tolerance': ('30', 'Centering tolerance in pixels'),
+    'target_bbox_width': ('365', 'Target bounding box width for approach in pixels'),
+    'turn_speed': ('0.25', 'Angular velocity in rad/s'),
+    'detection_timeout': ('1.0', 'Stop if no detection for this many seconds'),
+}
 
 
 def generate_launch_description():
     """Generate launch description with YOLO publisher, TeleopPublisher, and TeleopBase nodes."""
-    # Declare launch arguments
-    launch_args = [
-        DeclareLaunchArgument('include_hardware', default_value='true',
-                              description='Include hardware.launch.py'),
-        DeclareLaunchArgument('yolo_model', default_value='yolo11n.pt',
-                              description='Path to YOLO model file'),
-        DeclareLaunchArgument('image_width', default_value='1280',
-                              description='Camera image width in pixels'),
-        DeclareLaunchArgument('image_height', default_value='720',
-                              description='Camera image height in pixels'),
-        DeclareLaunchArgument('display', default_value='true',
-                              description='Display YOLO detection window'),
-        DeclareLaunchArgument('camera_backend', default_value='gstreamer',
-                              description='Camera backend (gstreamer, opencv)'),
-        DeclareLaunchArgument('camera_device', default_value='1',
-                              description='Camera device ID'),
-        DeclareLaunchArgument('gstreamer_pipeline', default_value='',
-                              description='Custom GStreamer pipeline'),
-        DeclareLaunchArgument('tracking_classes', default_value='39',
-                              description='Comma-separated COCO class IDs to track (39=bottle)'),
-        DeclareLaunchArgument('speed', default_value='0.05',
-                              description='Linear movement speed in m/s'),
-        DeclareLaunchArgument('bbox_tolerance', default_value='20',
-                              description='Bounding box width tolerance in pixels'),
-        DeclareLaunchArgument('center_tolerance', default_value='30',
-                              description='Centering tolerance in pixels'),
-        DeclareLaunchArgument('target_bbox_width', default_value='365',
-                              description='Target bounding box width for approach in pixels'),
-        DeclareLaunchArgument('turn_speed', default_value='0.25',
-                              description='Angular velocity in rad/s'),
-        DeclareLaunchArgument('detection_timeout', default_value='1.0',
-                              description='Stop if no detection for this many seconds'),
-    ]
+    # Generate launch arguments
+    launch_args = LaunchArg.generate_launch_arguments(LAUNCH_ARGS)
 
-    # Hardware Launch (conditional)
-    hardware_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            FindPackageShare('turtlebot3_manipulation_bringup'),
-            '/launch/hardware.launch.py'
-        ]),
-        launch_arguments={
-            'log_level': 'error'
-        }.items(),
-        condition=IfCondition(LaunchConfiguration('include_hardware'))
-    )
-    
     # YOLO Publisher Node
     yolo_publisher_node = Node(
         package='milestone6',
         executable='yolo_publisher',
         name='yolo_publisher',
         output='screen',
-        parameters=[{
-            'yolo_model': LaunchConfiguration('yolo_model'),
-            'image_width': LaunchConfiguration('image_width'),
-            'image_height': LaunchConfiguration('image_height'),
-            'display': LaunchConfiguration('display'),
-            'camera_backend': LaunchConfiguration('camera_backend'),
-            'camera_device': LaunchConfiguration('camera_device'),
-            'gstreamer_pipeline': LaunchConfiguration('gstreamer_pipeline'),
-        }]
+        parameters=[
+            LaunchArg.generate_launch_configs([
+                'yolo_model',
+                'image_width',
+                'image_height',
+                'display',
+                'camera_backend',
+                'camera_device',
+                'gstreamer_pipeline',
+            ])
+        ]
     )
 
     # Teleop Publisher Node
@@ -116,31 +90,30 @@ def generate_launch_description():
         output='screen',
     )
 
-    # Part1 Node (Visual Servoing - Centering Only)
+    # Part 1 Node
     part1_node = Node(
         package='milestone6',
         executable='part1',
         name='part1',
         output='screen',
-        parameters=[{
-            'image_width': LaunchConfiguration('image_width'),
-            'image_height': LaunchConfiguration('image_height'),
-            'speed': LaunchConfiguration('speed'),
-            'turn_speed': LaunchConfiguration('turn_speed'),
-            'tracking_classes': LaunchConfiguration('tracking_classes'),
-            'bbox_tolerance': LaunchConfiguration('bbox_tolerance'),
-            'center_tolerance': LaunchConfiguration('center_tolerance'),
-            'target_bbox_width': LaunchConfiguration('target_bbox_width'),
-            'detection_timeout': LaunchConfiguration('detection_timeout'),
-        }]
+        parameters=[
+            LaunchArg.generate_launch_configs([
+                'image_width',
+                'image_height',
+                'speed',
+                'turn_speed',
+                'tracking_classes',
+                'bbox_tolerance',
+                'center_tolerance',
+                'target_bbox_width',
+                'detection_timeout',
+            ])
+        ]
     )
 
     return LaunchDescription([
-        # Launch arguments
         *launch_args,
-        # Hardware (conditional)
-        hardware_launch,
-        # Nodes
+        HARDWARE_LAUNCH,
         teleop_publisher_node,
         yolo_publisher_node,
         part1_node,

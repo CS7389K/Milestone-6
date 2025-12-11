@@ -19,5 +19,5 @@
         "notebook.source.fixAll": "explicit",
         "notebook.source.organizeImports": "explicit"
     },
-    "ruff.lineLength": 120,
+    "ruff.configuration": "/path/to/ruff.toml"
 }

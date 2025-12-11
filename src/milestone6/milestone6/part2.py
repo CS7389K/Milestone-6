@@ -43,6 +43,7 @@ class State(Enum):
     RELEASING = 6       # Placing object and retracting arm
     DONE = 7            # Complete
 
+
 class Part2(Robot):
     """
     Complete Part 2 implementation with object centering,
