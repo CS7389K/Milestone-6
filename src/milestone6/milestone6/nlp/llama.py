@@ -39,9 +39,9 @@ class LlamaPublisher(Node):
         self.declare_parameter('n_ctx', 512)
         self.declare_parameter('n_threads', 4)
         self.declare_parameter('n_gpu_layers', 33)
-        self.declare_parameter('temperature', 0.7)
+        self.declare_parameter('temperature', 0.1)
         self.declare_parameter('top_p', 0.95)
-        self.declare_parameter('max_tokens', 128)
+        self.declare_parameter('max_tokens', 64)
 
         # Get parameters
         model_path = self.get_parameter('model_path').value
@@ -98,16 +98,19 @@ class LlamaPublisher(Node):
         try:
             # Get LLM response
             self.get_logger().info("Processing with LLaMA...")
+            self.get_logger().info(f"Prompt: {repr(prompt)}")
             response = self.llama(
                 prompt,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 top_p=self.top_p,
-                stream=True
+                stream=True,
+                stop=["\n\n", "User:", "Assistant:"]
             )
 
             # Log the full response for debugging
             self.get_logger().info(f"LLM raw response: {repr(response)}")
+            self.get_logger().info(f"Response length: {len(response)} chars")
 
             # Extract atomic action from response
             action = self._extract_action(response)
@@ -134,12 +137,12 @@ class LlamaPublisher(Node):
 
         if instruct:
             # Llama-2-instruct format: [INST] <<SYS>>\n{system}\n<</SYS>>\n\n{user} [/INST]
-            prompt = f"[INST] <<SYS>>\n{SYSTEM_PROMPT}\n<</SYS>>\n\n{user_text} [/INST]"
+            prompt = f"[INST] <<SYS>>\n{SYSTEM_PROMPT}\n<</SYS>>\n\n{user_text}\nAction: [/INST]"
         else:
             # Chat format
             prompt = SYSTEM_PROMPT + "\n\n"
             prompt += f"User: {user_text}\n"
-            prompt += "Assistant: "
+            prompt += "Action: "
 
         return prompt
 

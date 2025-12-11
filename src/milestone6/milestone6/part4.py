@@ -244,7 +244,8 @@ class Part4(Part2):
                 # Update tracking to search for placement target
                 self.tracking_classes = [self._get_class_id_for_object(target)]
                 self._speak(f"Transporting to {target}")
-                self.info(f"Now tracking {target} (class {self.tracking_classes[0]}) for placement")
+                self.info(
+                    f"Now tracking {target} (class {self.tracking_classes[0]}) for placement")
                 self.state = State.TRANSPORTING
             self._finish_action()
 
@@ -321,7 +322,8 @@ class Part4(Part2):
                     if self.held_object and self.placement_target:
                         # Centered on placement target while holding object
                         # Return to TRANSPORTING state to wait for PLACE command
-                        self.info(f"Centered on {self.placement_target}! Ready to place.")
+                        self.info(
+                            f"Centered on {self.placement_target}! Ready to place.")
                         self._speak(f"Centered on {self.placement_target}")
                         self.state = State.TRANSPORTING
                     else:
@@ -363,7 +365,8 @@ class Part4(Part2):
             if self.held_object and self.placement_target:
                 if self.detection_is_fresh():
                     # Target detected! Center on it while still holding object
-                    self._speak(f"Found {self.placement_target}, centering on it")
+                    self._speak(
+                        f"Found {self.placement_target}, centering on it")
                     self.state = State.CENTERING
                 # Otherwise continue accepting LLM actions while transporting
 
