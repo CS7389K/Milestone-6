@@ -69,6 +69,7 @@ class Robot(Node, ABC):
             if hasattr(cls, 'PARAMETERS') and cls.PARAMETERS is not None
         ]
         for base_class in classes_with_params:
+            self.info(f"Merging parameters from {base_class.__name__}: {base_class.PARAMETERS}")
             merged.update(base_class.PARAMETERS)
         return merged
 
@@ -77,9 +78,12 @@ class Robot(Node, ABC):
         self.info(f"Initializing Robot {node_name}...")
 
         # Declare and set merged parameters
+        # Priority: Launch config > Subclass PARAMETERS > Superclass PARAMETERS
         params = self._get_merged_params()
         for param_name, default_value in params.items():
-            self.declare_parameter(param_name, default_value)
+            # Only use the class default if no value was provided via launch config
+            if not self.has_parameter(param_name):
+                self.declare_parameter(param_name, default_value)
             self.__setattr__(param_name, self.get_parameter(param_name).value)
 
         # Track when we last saw the target object
