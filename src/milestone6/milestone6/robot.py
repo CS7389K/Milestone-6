@@ -8,9 +8,9 @@ from control_msgs.action import FollowJointTrajectory, GripperCommand
 from rclpy.node import Node
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
-from milestone6.milestone6.teleop.publisher import TeleopPublisher
-from milestone6.milestone6.yolo.subscriber import YOLOSubscriber
-from milestone6.milestone6.yolo.yolo_data import YOLOData
+from milestone6.teleop.publisher import TeleopPublisher
+from milestone6.yolo.subscriber import YOLOSubscriber
+from milestone6.yolo.yolo_data import YOLOData
 from milestone6.util.coco import COCO_CLASSES
 
 
@@ -21,7 +21,7 @@ class Robot(Node, ABC):
     YOLO object detection with teleoperation capabilities for the arm and base.
 
     Subclasses must implement:
-        tick(): Main control loop executed periodically
+        _tick(): Main control loop executed periodically
 
     Subclasses may override:
         _yolo_callback(data): Process YOLO detection data (default implementation
@@ -71,7 +71,7 @@ class Robot(Node, ABC):
 
     def __init__(self, node_name: str):
         super().__init__(node_name)
-        self.info(f"Initializing Node {node_name}...")
+        self.info(f"Initializing Robot {node_name}...")
 
         # Declare and set merged parameters
         params = self._get_merged_params()
@@ -106,15 +106,15 @@ class Robot(Node, ABC):
         self.yolo_subscriber = YOLOSubscriber(self, self._yolo_callback)
 
         # Create timer for main control loop
-        self.control_timer = self.create_timer(0.1, self.tick)
+        self.control_timer = self.create_timer(0.1, self._tick)
 
-        self.info(f"Node {node_name} has been started successfully.")
+        self.info(f"Robot {node_name}'s has been started successfully.")
 
     # ---------------------------------------------------------------------------- #
     #                    Methods to be implemented by subclasses                   #
     # ---------------------------------------------------------------------------- #
     @abstractmethod
-    def tick(self):
+    def _tick(self):
         """Main control loop tick to be implemented by subclasses."""
         pass
 

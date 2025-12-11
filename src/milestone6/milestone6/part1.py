@@ -28,7 +28,7 @@ class Part1(Robot):
         super().__init__('part1')
         self._is_moving = False
 
-    def tick(self):
+    def _tick(self):
         """Main control loop - center on object if detected."""
         if self.last_yolo_data is not None and self.detection_is_fresh():
             self.center_on_object(self.last_yolo_data)
@@ -53,6 +53,7 @@ def main(args=None):
         print(f"Error in Part 1: {e}")
     finally:
         if node:
+            node.shutdown()
             node.destroy_node()
         rclpy.shutdown()
 
