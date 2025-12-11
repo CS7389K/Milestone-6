@@ -306,6 +306,8 @@ class Part4(Part2):
 
     def _execute_search(self):
         """Execute search by spinning until object found or 360° complete."""
+        self.info(f"[SEARCH] Executing search for {self.search_target}")
+
         # Check if object has been found during search
         if self.detection_is_fresh() and not self.search_object_found:
             # Object found!
@@ -364,6 +366,10 @@ class Part4(Part2):
         elif self.state == State.EXECUTING_CMD:
             # Execute atomic action
             self._execute_atomic_action()
+
+        elif self.state == State.SEARCHING:
+            # Execute search by spinning and looking for target
+            self._execute_search()
 
         elif self.state == State.CENTERING:
             # Center on detected object (inherited from Part2/Robot)
@@ -425,10 +431,6 @@ class Part4(Part2):
         elif self.state == State.PLACING:
             # Use Part2's execute_release_sequence with next_state parameter
             self.execute_release_sequence(next_state=State.DONE)
-
-        elif self.state == State.SEARCHING:
-            # Execute search by spinning and looking for target
-            self._execute_search()
 
         elif self.state == State.DONE:
             self.stop_movement()
