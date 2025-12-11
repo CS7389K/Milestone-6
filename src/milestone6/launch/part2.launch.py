@@ -60,9 +60,9 @@ Optional Parameters:
 """
 
 from launch_ros.actions import Node
+from milestone6.util.launch import HARDWARE_LAUNCH, LaunchArg
 
 from launch import LaunchDescription
-from milestone6.util.launch import HARDWARE_LAUNCH, LaunchArg
 
 LAUNCH_ARGS = {
     'include_hardware': ('true', 'Include hardware.launch.py'),
@@ -104,8 +104,7 @@ LAUNCH_ARGS = {
 def generate_launch_description():
     """Generate launch description for Part 2 mission."""
     # Generate launch arguments
-    launch_args = LaunchArg.generate_launch_arguments(
-        LAUNCH_ARGS, PART1_LAUNCH_ARGS)
+    launch_args = LaunchArg.generate_launch_arguments(LAUNCH_ARGS)
 
     # YOLO Publisher Node
     yolo_publisher_node = Node(
