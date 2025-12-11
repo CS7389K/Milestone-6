@@ -34,6 +34,12 @@ Assistant: MOVE_FORWARD
 User: "Pick up the bottle"
 Assistant: GRAB
 
+User: "Place the bottle near the computer mouse"
+Assistant: TRANSPORT_TO MOUSE
+
+User: "Transport the bottle to the bear"
+Assistant: TRANSPORT_TO BEAR
+
 User: "Now go to the bear which is 2 meters ahead and slightly right"
 Assistant: MOVE_FORWARD
 
