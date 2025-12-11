@@ -99,14 +99,15 @@ source install/setup.sh
 **Objective**: Implement visual servoing that continuously tracks a bottle by rotating the robot to keep it centered in the camera frame.
 
 ```sh
-# On TurtleBot (includes hardware bringup):
+# On TurtleBot (includes hardware bringup by default):
 ros2 launch milestone6 part1.launch.py
 
-# Or without hardware bringup:
+# Without hardware bringup:
 ros2 launch milestone6 part1.launch.py include_hardware:=false
 ```
 
 **What it launches**:
+- Hardware bringup (unless include_hardware:=false)
 - TeleopPublisher Node: Centralized teleop service for base control
 - YOLO Publisher Node: Captures camera frames and publishes bottle detections
 - Part1 Node: Visual servoing controller (centering only, no approach)
@@ -116,17 +117,15 @@ ros2 launch milestone6 part1.launch.py include_hardware:=false
 **Objective**: Complete autonomous grab and transport sequence with mission states: IDLE → CENTERING → APPROACHING → GRABBING → TRANSPORTING → RELEASING → DONE
 
 ```sh
-# Start hardware first (on TurtleBot):
-ros2 launch turtlebot3_manipulation_bringup hardware.launch.py
-
-# Then start Part 2 mission:
+# On TurtleBot (includes hardware bringup by default):
 ros2 launch milestone6 part2.launch.py
 
-# Or with hardware auto-launch:
-ros2 launch milestone6 part2.launch.py include_hardware:=true
+# Without hardware bringup:
+ros2 launch milestone6 part2.launch.py include_hardware:=false
 ```
 
 **What it launches**:
+- Hardware bringup (unless include_hardware:=false)
 - YOLO Publisher Node: Object detection using camera
 - Part 2 Mission Node: Complete autonomous grab and transport sequence
 
@@ -149,7 +148,7 @@ ros2 launch milestone6 part3.tb3.launch.py
 - Espeak Subscriber: Text-to-speech output service
 
 *TurtleBot (part3.tb3.launch.py)*:
-- Hardware bringup (optional)
+- Hardware bringup (unless include_hardware:=false)
 - YOLO Publisher: Object detection
 - Part 3 Mission Node: Voice-guided search with audio recording
 
@@ -185,9 +184,47 @@ ros2 topic pub /user_command std_msgs/String "data: 'We are done'"
 - Espeak Subscriber: Text-to-speech output service
 
 *TurtleBot (part4.tb3.launch.py)*:
-- Hardware bringup (optional)
+- Hardware bringup (unless include_hardware:=false)
 - YOLO Publisher: Multi-object detection (bottle, bear, mouse)
 - Part 4 Mission Node: LLM-guided search and retrieval
+
+**Sample Natural Language Prompts**:
+
+The LLaMA model translates natural language into atomic robot actions. Here are example prompts you can use:
+
+*Exploration & Search:*
+- "Scan the room for the bottle"
+- "Look around and find the bear"
+- "Turn 360 degrees to search"
+- "Rotate left slowly"
+- "Turn right and look for objects"
+
+*Movement:*
+- "Move forward"
+- "Go straight for a bit"
+- "Back up slowly"
+- "Stop moving"
+
+*Object Manipulation:*
+- "Pick up the bottle"
+- "Grab the object in front of you"
+- "Place the bottle down"
+- "Release what you're holding"
+
+*Navigation:*
+- "Go to the bear"
+- "Navigate to the mouse which is 2 meters ahead"
+- "Move toward the bear on your left"
+
+*Combined Tasks:*
+- "Find the bottle, pick it up, and bring it to the bear"
+- "Search for the mouse and grab it"
+- "Go to the bear and place the bottle there"
+
+*Mission Control:*
+- "We are done"
+- "Mission complete"
+- "Stop and finish"
 
 ## Common Launch Parameters
 
