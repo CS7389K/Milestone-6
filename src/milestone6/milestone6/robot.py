@@ -69,23 +69,38 @@ class Robot(Node, ABC):
             if hasattr(cls, 'PARAMETERS') and cls.PARAMETERS is not None
         ]
         for base_class in classes_with_params:
-            self.info(f"Merging parameters from {base_class.__name__}: {base_class.PARAMETERS}")
+            self.info(
+                f"Merging parameters from {base_class.__name__}: {base_class.PARAMETERS}")
             merged.update(base_class.PARAMETERS)
             self.info(f"Merged parameters so far: {merged}")
         return merged
 
     def __init__(self, node_name: str):
-        super().__init__(node_name)
+        super().__init__(
+            node_name,
+            allow_undeclared_parameters=True,
+            automatically_declare_parameters_from_overrides=True
+        )
         self.info(f"Initializing Robot {node_name}...")
 
-        # Declare and set merged parameters
+        # Get merged parameters from class hierarchy
         # Priority: Launch config > Subclass PARAMETERS > Superclass PARAMETERS
         params = self._get_merged_params()
+
+        # Declare parameters with proper precedence
         for param_name, default_value in params.items():
-            # Only use the class default if no value was provided via launch config
-            if not self.has_parameter(param_name):
+            # Try to get existing parameter value (from launch config)
+            try:
+                value = self.get_parameter(param_name).value
+                self.debug(f"Parameter {param_name} from launch = {value}")
+            except Exception:
+                # Parameter not set via launch, declare with class default
                 self.declare_parameter(param_name, default_value)
-            self.__setattr__(param_name, self.get_parameter(param_name).value)
+                value = self.get_parameter(param_name).value
+                self.debug(
+                    f"Parameter {param_name} from class default = {value}")
+
+            self.__setattr__(param_name, value)
 
         # Track when we last saw the target object
         self.last_detection_time = None
