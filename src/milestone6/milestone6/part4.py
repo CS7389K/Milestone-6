@@ -234,7 +234,9 @@ class Part4(Part2):
                 self.search_initial_yaw = None
                 self.search_object_found = False
                 self.state = State.SEARCHING
-            self._finish_action()
+                # Don't call _finish_action() - we want to stay in SEARCHING state
+            else:
+                self._finish_action()
 
         elif action == 'GRAB':
             # Transition to visual servoing for grabbing
