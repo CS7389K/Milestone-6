@@ -136,8 +136,10 @@ class LlamaPublisher(Node):
         instruct = self.get_parameter('instruct').value
 
         if instruct:
-            # Llama-2-instruct format: [INST] <<SYS>>\n{system}\n<</SYS>>\n\n{user} [/INST]
-            prompt = f"[INST] <<SYS>>\n{SYSTEM_PROMPT}\n<</SYS>>\n\n{user_text} [/INST]"
+            # Llama-2-32K-Instruct format: [INST]\n{system + user}\n[/INST]\n
+            # Combine system prompt and user text
+            combined = f"{SYSTEM_PROMPT}\n\n{user_text}"
+            prompt = f"[INST]\n{combined}\n[/INST]\n"
         else:
             # Chat format
             prompt = SYSTEM_PROMPT + "\n\n"
