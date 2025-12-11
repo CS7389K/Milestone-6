@@ -341,6 +341,7 @@ class Part4(Part2):
             self.search_initial_yaw = None
         else:
             # Continue rotating
+            self.info(f"[SEARCH] Rotating: yaw_diff={yaw_diff:.2f}, scan_speed={self.scan_speed}")
             self.teleop_publisher.set_velocity(0.0, self.scan_speed)
 
     def _finish_action(self):
