@@ -29,7 +29,8 @@ class LlamaBackend():
         else:
             if isinstance(model_path, str):
                 model_path = Path(model_path)
-            # assert not model_path.exists(), f"Model path '{model_path}' is not a valid file."
+
+        print(f"Loading model: {str(model_path.resolve())}")
 
         # Verify file exists before loading
         if not model_path.exists():
