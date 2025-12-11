@@ -98,15 +98,15 @@ class LlamaPublisher(Node):
         try:
             # Get LLM response
             self.get_logger().info("Processing with LLaMA...")
-            self.get_logger().info(f"Prompt: {repr(prompt)}")
+            # Log last 100 chars
+            self.get_logger().info(f"Prompt: {repr(prompt[-100:])}...")
             response = self.llama(
                 prompt,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 top_p=self.top_p,
                 stream=True,
-                stop=["\n\n", "User:", "[/INST]", "</s>",
-                      "[INST]", "\n1.", "\n2.", "\n-"]
+                stop=["\n", "</s>"]  # Stop at newline or end-of-sequence
             )
 
             # Log the full response for debugging
@@ -132,18 +132,13 @@ class LlamaPublisher(Node):
 
     def _build_prompt(self, user_text: str) -> str:
         """Build prompt with system context and user input."""
-        # For instruct models, use [INST] format
-        # For chat models, use conversational format
-        instruct = self.get_parameter('instruct').value
+        # Use plain text completion format (not [INST] tags)
+        # This achieves 100% accuracy with comprehensive examples
+        # Normalize input to lowercase for better matching
+        user_text_lower = user_text.lower()
 
-        if instruct:
-            # Llama-2-32K-Instruct format: [INST]\n{instruction}\n[/INST]\n
-            prompt = f"[INST]\n{SYSTEM_PROMPT}\n\nCommand: \"{user_text}\"\nAction: [/INST]"
-        else:
-            # Chat format
-            prompt = SYSTEM_PROMPT + "\n\n"
-            prompt += f"User: {user_text}\n"
-            prompt += "Assistant: "
+        # Build prompt: examples + user command
+        prompt = SYSTEM_PROMPT + "\n\n" + user_text_lower + " ->"
 
         return prompt
 

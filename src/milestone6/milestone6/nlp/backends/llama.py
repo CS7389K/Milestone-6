@@ -65,8 +65,8 @@ class LlamaBackend():
         stop: list = None
     ) -> str:
         if stop is None:
-            stop = ["\n\n", "User:", "[/INST]", "</s>",
-                    "[INST]", "\n1.", "\n2.", "\n-"]
+            # Default stop tokens optimized for action translation
+            stop = ["\n", "</s>"]
 
         chunks = self.llm(
             prompt,
@@ -77,6 +77,6 @@ class LlamaBackend():
             stop=stop
         )
         response = "".join([c["choices"][0]["text"] for c in chunks])
-        # Strip whitespace and common artifacts
-        response = response.strip().lstrip(":")
+        # Strip whitespace only (don't replace newlines since we stop on them)
+        response = response.strip()
         return response

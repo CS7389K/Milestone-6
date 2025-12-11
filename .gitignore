@@ -1,6 +1,7 @@
 .DS_Store
 install
 log
+models
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
