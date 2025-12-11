@@ -2,7 +2,7 @@
 """
 Launch file for Milestone 6 Part 1: Visual Servoing for Bottle Tracking
 
-Part 1 Objective:
+Objective:
     Implement visual servoing that continuously tracks a bottle by rotating the robot
     to keep the bottle centered in the camera frame. The robot should lock onto the
     bottle and smoothly follow it as it moves.
@@ -16,10 +16,7 @@ Usage:
     ros2 launch milestone6 part1.launch.py
 
 Optional Parameters:
-    # Hardware Control
     include_hardware:=<bool>       Include hardware.launch.py (default: true)
-    
-    # YOLO Configuration
     yolo_model:=<path>             Path to YOLO model file (default: yolo11n.pt)
     image_width:=<int>             Camera image width in pixels (default: 1280)
     image_height:=<int>            Camera image height in pixels (default: 720)
@@ -27,8 +24,6 @@ Optional Parameters:
     camera_backend:=<str>          Camera backend: gstreamer or opencv (default: gstreamer)
     camera_device:=<int>           Camera device ID (default: 1)
     gstreamer_pipeline:=<str>      Custom GStreamer pipeline (default: '')
-    
-    # Visual Servoing Parameters
     tracking_classes:=<str>        Comma-separated COCO class IDs (default: '39' for bottle)
     speed:=<float>                 Linear movement speed in m/s (default: 0.15)
     bbox_tolerance:=<int>          Bounding box width tolerance in pixels (default: 20)
@@ -36,23 +31,6 @@ Optional Parameters:
     target_bbox_width:=<int>       Target bounding box width for approach in pixels (default: 180)
     turn_speed:=<float>            Angular velocity for turning rad/s (default: 1.0)
     detection_timeout:=<float>     Stop if no detection for N seconds (default: 0.5)
-
-Examples:
-    # Use different camera
-    ros2 launch milestone6 part1.launch.py camera_device:=0
-    
-    # Track cups instead of bottles
-    ros2 launch milestone6 part1.launch.py tracking_classes:='41'
-    
-    # Faster turning speed
-    ros2 launch milestone6 part1.launch.py turn_speed:=1.0
-    
-    # Disable hardware launch (if running separately)
-    ros2 launch milestone6 part1.launch.py include_hardware:=false
-
-Demonstration:
-    Move the bottle slowly left and right in front of the robot. The robot should
-    smoothly rotate to keep the bottle centered in the camera frame.
 """
 
 
