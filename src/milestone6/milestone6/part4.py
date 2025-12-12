@@ -60,7 +60,8 @@ class Part4(Part2):
 
     # Override and extend Part2 parameters
     PARAMETERS = {
-        'tracking_classes': '39,77,64',  # bottle, bear, mouse
+        # bottle, bear, donut (also bear), mouse
+        'tracking_classes': '39,77,54,64',
         'turn_duration': 1.0,           # seconds
         'forward_duration': 0.5,        # seconds
         'scan_speed': 0.5,              # rad/s
@@ -166,14 +167,14 @@ class Part4(Part2):
         """Extract target object from TRANSPORT_TO command."""
         return self._parse_search_target(action)
 
-    def _get_class_id_for_object(self, obj_name: str) -> int:
-        """Get COCO class ID for object name."""
+    def _get_class_id_for_object(self, obj_name: str) -> list:
+        """Get COCO class IDs for object name (may return multiple for synonyms)."""
         mapping = {
-            'bottle': 39,
-            'bear': 77,
-            'mouse': 64
+            'bottle': [39],
+            'bear': [77, 54],  # teddy bear and donut (misrecognized as bear)
+            'mouse': [64]
         }
-        return mapping.get(obj_name, 39)
+        return mapping.get(obj_name, [39])
 
     def _execute_atomic_action(self):
         """Execute the current atomic action from LLM."""
@@ -226,10 +227,10 @@ class Part4(Part2):
                 self.search_target = target
                 # Update tracking_classes by modifying the parameter
                 # Note: tracking_classes is already a list in Robot base class
-                self.tracking_classes = [self._get_class_id_for_object(target)]
+                self.tracking_classes = self._get_class_id_for_object(target)
                 self._speak(f"Searching for {target}")
                 self.info(
-                    f"Searching for {target} (class {self.tracking_classes[0]})")
+                    f"Searching for {target} (classes {self.tracking_classes})")
                 # Initialize search
                 self.search_initial_yaw = None
                 self.search_object_found = False
@@ -257,10 +258,10 @@ class Part4(Part2):
                 self.placement_target = target
                 self.held_object = 'bottle'  # Assume we picked up bottle
                 # Update tracking to search for placement target
-                self.tracking_classes = [self._get_class_id_for_object(target)]
+                self.tracking_classes = self._get_class_id_for_object(target)
                 self._speak(f"Transporting to {target}")
                 self.info(
-                    f"Now tracking {target} (class {self.tracking_classes[0]}) for placement")
+                    f"Now tracking {target} (classes {self.tracking_classes}) for placement")
                 self.state = State.TRANSPORTING
             self._finish_action()
 
