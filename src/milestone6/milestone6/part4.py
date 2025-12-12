@@ -193,7 +193,7 @@ class Part4(Part2):
         # Execute action based on type
         if action == 'TURN_LEFT':
             if elapsed < self.turn_duration:
-                self._speak("Turning left")
+                # self._speak("Turning left")
                 self.teleop_publisher.set_velocity(0.0, self.scan_speed)
             else:
                 self.stop_movement()
@@ -201,7 +201,7 @@ class Part4(Part2):
 
         elif action == 'TURN_RIGHT':
             if elapsed < self.turn_duration:
-                self._speak("Turning right")
+                # self._speak("Turning right")
                 self.teleop_publisher.set_velocity(0.0, -self.scan_speed)
             else:
                 self.stop_movement()
@@ -209,7 +209,7 @@ class Part4(Part2):
 
         elif action == 'MOVE_FORWARD':
             if elapsed < self.forward_duration:
-                self._speak("Moving forward")
+                # self._speak("Moving forward")
                 self.teleop_publisher.set_velocity(self.forward_speed_llm, 0.0)
             else:
                 self.stop_movement()
@@ -314,8 +314,9 @@ class Part4(Part2):
             self.stop_movement()
             self.search_object_found = True
             self._speak("Found you")
-            self.info(f"Found {self.search_target}!")
-            self.state = State.LLM_GUIDED
+            self.info(f"Found {self.search_target}! Centering on it...")
+            # Transition to CENTERING to center and approach the object
+            self.state = State.CENTERING
             self.search_initial_yaw = None
             return
 
@@ -386,6 +387,11 @@ class Part4(Part2):
                             f"Centered on {self.placement_target}! Ready to place.")
                         self._speak(f"Centered on {self.placement_target}")
                         self.state = State.TRANSPORTING
+                    elif self.search_object_found and self.search_target:
+                        # Centered after a SEARCH command - now approach
+                        self.state = State.APPROACHING
+                        self.info(
+                            "Centered on search target! Moving to approach...")
                     else:
                         # Normal centering before grab
                         self.state = State.APPROACHING
@@ -398,6 +404,10 @@ class Part4(Part2):
                 # Return to appropriate state
                 if self.held_object:
                     self.state = State.TRANSPORTING
+                elif self.search_object_found:
+                    # Lost object after search - return to LLM_GUIDED
+                    self.search_object_found = False
+                    self.state = State.LLM_GUIDED
                 else:
                     self.state = State.LLM_GUIDED
 
@@ -406,14 +416,26 @@ class Part4(Part2):
             if self.detection_is_fresh():
                 if self.is_at_grab_distance(self.last_yolo_data):
                     self.stop_movement()
-                    self.info("At grab distance! Executing grab...")
-                    self.grab_step = 0
-                    self.state = State.GRABBING
+                    # Check if this was from a SEARCH command or a GRAB command
+                    if self.search_object_found and self.search_target:
+                        # Approaching after SEARCH - stop here and wait for next command
+                        self.info(
+                            f"Reached {self.search_target}! Waiting for next command...")
+                        self._speak("Object reached")
+                        self.search_object_found = False
+                        self.state = State.LLM_GUIDED
+                    else:
+                        # Normal approach before grab
+                        self.info("At grab distance! Executing grab...")
+                        self.grab_step = 0
+                        self.state = State.GRABBING
                 else:
                     self.approach_object(self.last_yolo_data)
             else:
                 self.stop_movement()
                 self.warning("Lost object during approach")
+                if self.search_object_found:
+                    self.search_object_found = False
                 self.state = State.LLM_GUIDED
 
         elif self.state == State.GRABBING:
