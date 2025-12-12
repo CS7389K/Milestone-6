@@ -228,7 +228,7 @@ class Part4(Part2):
                 # Update tracking_classes by modifying the parameter
                 # Note: tracking_classes is already a list in Robot base class
                 self.tracking_classes = self._get_class_id_for_object(target)
-                self._speak(f"Searching for {target}")
+                # self._speak(f"Searching for {target}")
                 self.info(
                     f"Searching for {target} (classes {self.tracking_classes})")
                 # Initialize search
