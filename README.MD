@@ -21,16 +21,16 @@
 
 Milestone 6 integrates multiple ROS2 subsystems to create a comprehensive robotics platform with four progressive parts:
 
-1. **Part 1: Visual Servoing** - Bottle tracking using camera-based feedback
-2. **Part 2: Autonomous Grab & Transport** - Complete object manipulation mission
-3. **Part 3: Voice-Guided Search** - Speech interaction with Whisper and Espeak
-4. **Part 4: LLM-Guided Navigation** - Natural language commands via LLaMA
+- **Part 1: Visual Servoing** - Object tracking using camera-based feedback
+- **Part 2: Autonomous Grab & Transport** - Complete object manipulation and movement
+- **Part 3: Voice-Guided Search** - Speech interaction with Whisper and Espeak
+- **Part 4: LLM-Guided Navigation** - Natural language commands via LLaMA and Espeak
 
 This project combines:
 
 - **Teleoperation** ([Milestone 3](https://github.com/CS7389K/Milestone-3)): Command-line interface for robot control
 - **Computer Vision** ([Milestone 4](https://github.com/CS7389K/Milestone-4)): YOLO-based object detection
-- **LLM Interaction** ([Milestone 5](https://github.com/CS7389K/Milestone-5)): LLaMA integration for natural language processing using [Llama-2-7B-32K-Instruct-GGUF](https://huggingface.co/TheBloke/Llama-2-7B-32K-Instruct-GGUF)
+- **LLM Interaction** ([Milestone 5](https://github.com/CS7389K/Milestone-5)): LLaMA integration for natural language processing using
 
 The system is designed to run across multiple devices: a remote PC and a Turtlebot with Jetson
 
@@ -43,6 +43,9 @@ The system is designed to run across multiple devices: a remote PC and a Turtleb
   - Remote PC
   - Turtlebot with a Jetson
   - Secondary Jetson (optional)
+- **Models**:
+  - [YOLO](https://docs.ultralytics.com/models/)
+  - [Llama-2-7B-32K-Instruct-GGUF](https://huggingface.co/TheBloke/Llama-2-7B-32K-Instruct-GGUF)
 
 ## Installation
 
@@ -72,7 +75,7 @@ wsl --manage Ubuntu-20.04 --move F:\WSL
 Run the installation script provided in the repository:
 
 ```bash
-sh install-ros2-foxy-desktop.sh
+sh ./scripts/install-ros2-foxy-desktop.sh
 ```
 
 Alternatively, follow the [official ROS2 Foxy installation guide](https://docs.ros.org/en/foxy/Installation/Ubuntu-Install-Debians.html).
@@ -83,7 +86,6 @@ Navigate to the project root directory and build the workspace:
 
 ```bash
 colcon build --symlink-install
-source install/setup.bash
 ```
 
 ## Usage
@@ -94,30 +96,6 @@ After building the project, source the workspace in each terminal session:
 source install/setup.sh
 ```
 
-## Nodes
-
-The system consists of the following ROS2 nodes:
-
-### Mission Control Nodes
-- **Part1** (`part1`) - Visual servoing controller that centers the robot on detected bottles
-- **Part2** (`part2`) - Autonomous grab and transport mission with state machine (IDLE → CENTERING → APPROACHING → GRABBING → TRANSPORTING → RELEASING → DONE)
-- **Part3** - Voice-guided search extending Part2 with speech commands (turn, move, scan)
-- **Part4** - LLM-guided mission extending Part2 with natural language commands via LLaMA
-
-### Perception & Control Nodes
-- **YOLOPublisher** (`yolo_publisher`) - Object detection using YOLO, publishes bounding box data to `/yolo_detections`
-- **TeleopPublisher** - Centralized teleop service for base movement, arm control, and gripper commands
-
-### Natural Language Processing Nodes
-- **WhisperPublisher** (`whisper_publisher`) - Speech-to-text transcription, publishes to `/voice_transcription`
-- **EspeakSubscriber** (`espeak_subscriber`) - Text-to-speech output, subscribes to `/text_to_speech`
-- **LlamaPublisher** (`llama_publisher`) - Translates natural language to atomic robot actions, subscribes to `/user_command` and publishes to `/llm_action`
-
-### Utility Nodes
-- **CommandSender** (`command_sender`) - Interactive CLI for sending commands to `/user_command`
-
-## Launch Configurations
-
 ### Part 1: Visual Servoing for Bottle Tracking
 
 Visual servoing that tracks a bottle by keeping it centered in the camera frame.
@@ -126,10 +104,6 @@ Visual servoing that tracks a bottle by keeping it centered in the camera frame.
 ros2 launch milestone6 part1.launch.py
 ```
 
-**Nodes**: Hardware bringup, TeleopPublisher, YOLO Publisher, Part1 Controller
-
-**Parameters**: See [part1.launch.py](src/milestone6/launch/part1.launch.py)
-
 ### Part 2: Autonomous Grab & Transport
 
 Complete autonomous sequence to grab and transport an object.
@@ -137,10 +111,6 @@ Complete autonomous sequence to grab and transport an object.
 ```sh
 ros2 launch milestone6 part2.launch.py
 ```
-
-**Nodes**: Hardware bringup, YOLO Publisher, Part2 Mission
-
-**Parameters**: See [part2.launch.py](src/milestone6/launch/part2.launch.py)
 
 ### Part 3: Voice-Guided Search
 
@@ -153,12 +123,7 @@ ros2 launch milestone6 part3.jetson.launch.py
 # On TurtleBot:
 ros2 launch milestone6 part3.tb3.launch.py
 ```
-
-**Nodes**:
-- *Remote PC*: Whisper Publisher, Espeak Subscriber
-- *TurtleBot*: Hardware bringup, YOLO Publisher, Part3 Mission
-
-**Parameters**: See [part3.jetson.launch.py](src/milestone6/launch/part3.jetson.launch.py) and [part3.tb3.launch.py](src/milestone6/launch/part3.tb3.launch.py)
+**Note:** Remote PC and TurtleBot need to be connected to the same wifi network.
 
 ### Part 4: LLM-Guided Navigation
 
@@ -172,32 +137,17 @@ ros2 launch milestone6 part4.jetson.launch.py
 ros2 launch milestone6 part4.tb3.launch.py
 
 # Send commands using the interactive CLI:
-python3 src/milestone6/milestone6/nlp/cli.py
+ros2 run milestone6 cli
 
 # Or publish to /user_command topic:
 ros2 topic pub /user_command std_msgs/String "data: 'search for the bottle'"
 ```
-
-**Nodes**:
-- *Remote PC*: LLaMA Publisher, Espeak Subscriber
-- *TurtleBot*: Hardware bringup, YOLO Publisher, Part4 Mission
 
 **Example Commands** (use lowercase):
 - "scan the room for the bottle" → Robot rotates 360° looking for bottle
 - "pick up the bottle" → Robot executes grab sequence
 - "go to the bear" → Robot navigates toward bear object
 - "we are done" → Mission complete
-
-**Parameters**: See [part4.jetson.launch.py](src/milestone6/launch/part4.jetson.launch.py) and [part4.tb3.launch.py](src/milestone6/launch/part4.tb3.launch.py)
-
-## Launch Parameters
-
-All parts support common parameters like `include_hardware:=false`, `yolo_model:=<path>`, `display:=<bool>`, `speed:=<float>`, etc. See individual launch files in [src/milestone6/launch/](src/milestone6/launch/) for complete parameter lists and defaults.
-
-**Example**:
-```sh
-ros2 launch milestone6 part1.launch.py include_hardware:=false display:=false speed:=0.1
-```
 
 ## Resources
 
