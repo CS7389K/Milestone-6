@@ -30,7 +30,7 @@ This project combines:
 
 - **Teleoperation** ([Milestone 3](https://github.com/CS7389K/Milestone-3)): Command-line interface for robot control
 - **Computer Vision** ([Milestone 4](https://github.com/CS7389K/Milestone-4)): YOLO-based object detection
-- **LLM Interaction** ([Milestone 5](https://github.com/CS7389K/Milestone-5)): LLaMA integration for natural language processing using [Llama-2-7B-32K-Instruct-GGUF](https://huggingface.co/TheBloke/Llama-2-7B-32K-Instruct-GGUF)
+- **LLM Interaction** ([Milestone 5](https://github.com/CS7389K/Milestone-5)): LLaMA integration for natural language processing using
 
 The system is designed to run across multiple devices: a remote PC and a Turtlebot with Jetson
 
@@ -43,6 +43,9 @@ The system is designed to run across multiple devices: a remote PC and a Turtleb
   - Remote PC
   - Turtlebot with a Jetson
   - Secondary Jetson (optional)
+- **Models**:
+  - [YOLO](https://docs.ultralytics.com/models/)
+  - [Llama-2-7B-32K-Instruct-GGUF](https://huggingface.co/TheBloke/Llama-2-7B-32K-Instruct-GGUF)
 
 ## Installation
 
