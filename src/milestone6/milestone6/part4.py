@@ -66,6 +66,9 @@ class Part4(Part2):
         'forward_duration': 0.5,        # seconds
         'scan_speed': 0.5,              # rad/s
         'forward_speed_llm': 0.2,       # m/s
+        # Target bbox size as percentage of screen width (0-1) for bear and mouse
+        'target_bbox_percentage_bear': 0.28,  # 28% of screen width
+        'target_bbox_percentage_mouse': 0.22,  # 22% of screen width
     }
 
     def __init__(self):
@@ -149,6 +152,70 @@ class Part4(Part2):
         msg = String()
         msg.data = text
         self.tts_publisher.publish(msg)
+
+    def is_at_grab_distance(self, yolo_data: YOLOData):
+        """Check if object is at ideal grabbing distance.
+
+        For bottle: Use original pixel-based target_bbox_width logic.
+        For bear and mouse: Use percentage of screen width (0-1 scale).
+        """
+        # Determine which target we're approaching
+        if self.current_target == 'bottle':
+            # Use original pixel-based logic from Robot base class
+            bbox_error = abs(yolo_data.bbox_w - self.target_bbox_width)
+            return bbox_error <= self.bbox_tolerance
+        elif self.current_target == 'bear':
+            # Use percentage-based logic for bear
+            target_width_pixels = self.target_bbox_percentage_bear * self.image_width
+            bbox_error = abs(yolo_data.bbox_w - target_width_pixels)
+            return bbox_error <= self.bbox_tolerance
+        elif self.current_target == 'mouse':
+            # Use percentage-based logic for mouse
+            target_width_pixels = self.target_bbox_percentage_mouse * self.image_width
+            bbox_error = abs(yolo_data.bbox_w - target_width_pixels)
+            return bbox_error <= self.bbox_tolerance
+        else:
+            # Fallback to parent implementation
+            return super().is_at_grab_distance(yolo_data)
+
+    def approach_object(self, yolo_data: YOLOData):
+        """
+        Move forward/backward to achieve ideal grabbing distance.
+        Returns True if at correct distance, False otherwise.
+
+        For bottle: Use original pixel-based target_bbox_width logic.
+        For bear and mouse: Use percentage of screen width (0-1 scale).
+        """
+        # Determine target width based on current_target
+        if self.current_target == 'bottle':
+            target_width = self.target_bbox_width
+        elif self.current_target == 'bear':
+            target_width = self.target_bbox_percentage_bear * self.image_width
+        elif self.current_target == 'mouse':
+            target_width = self.target_bbox_percentage_mouse * self.image_width
+        else:
+            # Fallback to parent implementation
+            return super().approach_object(yolo_data)
+
+        bbox_error = yolo_data.bbox_w - target_width
+
+        if abs(bbox_error) <= self.bbox_tolerance:
+            self.stop_movement()
+            return True
+
+        if bbox_error < -self.bbox_tolerance:
+            # Too far, move forward
+            linear_vel = self.speed
+            self.debug(f"Too far (bbox={yolo_data.bbox_w:.0f}px, target={target_width:.0f}px), "
+                       f"moving forward")
+        else:
+            # Too close, move backward
+            linear_vel = -self.speed * 0.5
+            self.debug(f"Too close (bbox={yolo_data.bbox_w:.0f}px, target={target_width:.0f}px), "
+                       f"backing up")
+
+        self.teleop_publisher.set_velocity(linear_x=linear_vel, angular_z=0.0)
+        return False
 
     def _parse_search_target(self, action: str) -> str:
         """Extract target object from SEARCH command."""

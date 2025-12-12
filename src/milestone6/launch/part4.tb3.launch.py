@@ -70,6 +70,8 @@ LAUNCH_ARGS = {
     'forward_duration': ('0.5', 'Duration for forward commands in seconds'),
     'scan_speed': ('0.5', 'Rotation speed for scan command in rad/s'),
     'forward_speed_llm': ('0.2', 'Linear velocity for LLM forward commands in m/s'),
+    'target_bbox_percentage_bear': ('0.28', 'Target bbox size as percentage of screen width for bear (0-1)'),
+    'target_bbox_percentage_mouse': ('0.22', 'Target bbox size as percentage of screen width for mouse (0-1)'),
 }
 
 
@@ -137,6 +139,8 @@ def generate_launch_description():
                 'forward_duration',
                 'scan_speed',
                 'forward_speed_llm',
+                'target_bbox_percentage_bear',
+                'target_bbox_percentage_mouse',
             ])
         ]
     )
