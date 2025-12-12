@@ -75,7 +75,7 @@ wsl --manage Ubuntu-20.04 --move F:\WSL
 Run the installation script provided in the repository:
 
 ```bash
-sh install-ros2-foxy-desktop.sh
+sh ./scripts/install-ros2-foxy-desktop.sh
 ```
 
 Alternatively, follow the [official ROS2 Foxy installation guide](https://docs.ros.org/en/foxy/Installation/Ubuntu-Install-Debians.html).
@@ -86,7 +86,6 @@ Navigate to the project root directory and build the workspace:
 
 ```bash
 colcon build --symlink-install
-source install/setup.bash
 ```
 
 ## Usage
