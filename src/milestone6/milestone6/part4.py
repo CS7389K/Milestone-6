@@ -530,8 +530,8 @@ class Part4(Part2):
             if self.held_object and self.placement_target:
                 if self.detection_is_fresh():
                     # Target detected! Center on it while still holding object
-                    self._speak(
-                        f"Found {self.placement_target}, centering on it")
+                    # self._speak(
+                    #     f"Found {self.placement_target}, centering on it")
                     self.state = State.CENTERING
                 # Otherwise continue accepting LLM actions while transporting
 
