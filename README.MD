@@ -21,10 +21,10 @@
 
 Milestone 6 integrates multiple ROS2 subsystems to create a comprehensive robotics platform with four progressive parts:
 
-1. **Part 1: Visual Servoing** - Bottle tracking using camera-based feedback
-2. **Part 2: Autonomous Grab & Transport** - Complete object manipulation mission
-3. **Part 3: Voice-Guided Search** - Speech interaction with Whisper and Espeak
-4. **Part 4: LLM-Guided Navigation** - Natural language commands via LLaMA
+- **Part 1: Visual Servoing** - Object tracking using camera-based feedback
+- **Part 2: Autonomous Grab & Transport** - Complete object manipulation and movement
+- **Part 3: Voice-Guided Search** - Speech interaction with Whisper and Espeak
+- **Part 4: LLM-Guided Navigation** - Natural language commands via LLaMA and Espeak
 
 This project combines:
 
