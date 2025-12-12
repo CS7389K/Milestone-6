@@ -94,8 +94,6 @@ After building the project, source the workspace in each terminal session:
 source install/setup.sh
 ```
 
-## Launch Configurations
-
 ### Part 1: Visual Servoing for Bottle Tracking
 
 Visual servoing that tracks a bottle by keeping it centered in the camera frame.
