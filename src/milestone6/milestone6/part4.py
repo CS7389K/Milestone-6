@@ -310,6 +310,19 @@ class Part4(Part2):
 
         elif action == 'GRAB':
             # Transition to visual servoing for grabbing
+            # Debug: Log current state
+            self.info("[GRAB] Checking if object is detected...")
+            self.info(f"[GRAB] Current target: {self.current_target}")
+            self.info(f"[GRAB] Tracking classes: {self.tracking_classes}")
+            self.info(f"[GRAB] Last YOLO data: {self.last_yolo_data}")
+            self.info(f"[GRAB] Detection fresh: {self.detection_is_fresh()}")
+
+            if self.last_yolo_data is not None:
+                elapsed = (self.get_clock().now() - self.last_detection_time).nanoseconds / \
+                    1e9 if self.last_detection_time else float('inf')
+                self.info(
+                    f"[GRAB] Time since last detection: {elapsed:.3f}s (timeout: {self.detection_timeout}s)")
+
             if self.detection_is_fresh():
                 self.grab_step = 0  # Initialize grab sequence
                 self.state = State.CENTERING
@@ -317,6 +330,8 @@ class Part4(Part2):
                 self._finish_action()
             else:
                 self._speak("No object detected, cannot grab")
+                self.warning(
+                    "GRAB failed - detection_is_fresh() returned False")
                 self._finish_action()
 
         elif action.startswith('TRANSPORT_TO'):
